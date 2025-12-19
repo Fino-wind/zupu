@@ -6,17 +6,9 @@ import {
   Heart, Lock, Unlock, ShieldCheck, Send, MessageCircle, 
   X, Layout, Key, Loader2, AlertTriangle, ArchiveRestore, 
   Settings, MapPin, BookOpen, User, Crown, ArrowUpCircle,
-  Fingerprint, Bell
+  Fingerprint, Bell, Scroll
 } from 'lucide-react';
 import { analyzeRelationship, generateBiography, askAiAboutMember, AISettings } from './services/geminiService';
-
-const INITIAL_DATA: FamilyMember[] = [
-  { id: '1', name: '袁鸿儒', birthDate: '1940-01-01', isMarried: true, address: '北京祖籍地', gender: 'male', parentId: null, biography: '袁氏先祖，博学弘志，开创家族之基。', spouseName: '李婉清', isDeleted: false },
-  { id: '2', name: '袁希贤', birthDate: '1965-05-20', isMarried: true, address: '上海寓所', gender: 'male', parentId: '1', spouseName: '陈淑慧', isDeleted: false },
-  { id: '3', name: '袁静茹', birthDate: '1968-08-12', isMarried: false, address: '杭州西湖', gender: 'female', parentId: '1', isDeleted: false },
-  { id: '4', name: '袁思齐', birthDate: '1990-10-10', isMarried: false, address: '广东鹏城', gender: 'male', parentId: '2', isDeleted: false, isHighlight: true, biography: '家族核心人物，承前启后，功绩卓著。' },
-  { id: '5', name: '袁嘉懿', birthDate: '1995-02-14', isMarried: false, address: '海外海外', gender: 'female', parentId: '2', isDeleted: false },
-];
 
 // 提取递归查找后代的逻辑
 const getDescendants = (parentId: string, all: FamilyMember[]): string[] => {
@@ -41,81 +33,42 @@ const calculateAge = (birthDate: string): number | string => {
   return age;
 };
 
-// --- 增强版 Markdown 渲染组件 (Fix: 更好的 Block 处理) ---
+// --- 增强版 Markdown 渲染组件 ---
 const MarkdownRenderer = ({ content }: { content: string }) => {
   if (!content) return null;
-
-  // 预处理换行，确保 headers 前后有换行以便分割
   const normalized = content.replace(/^(#{1,6}\s)/gm, '\n$1');
   const blocks = normalized.split('\n');
-  
   return (
     <div className="space-y-3 text-ink/90 leading-relaxed text-justify">
       {blocks.map((line, idx) => {
         const trimmed = line.trim();
         if (!trimmed) return null;
-
-        // Headers
-        if (trimmed.startsWith('### ')) {
-          return <h3 key={idx} className="text-sm font-bold text-vermilion border-b border-vermilion/20 pb-1 mt-4">{parseBold(trimmed.replace(/^###\s+/, ''))}</h3>;
-        }
-        if (trimmed.startsWith('## ')) {
-          return <h2 key={idx} className="text-base font-bold text-ink mt-4 mb-2">{parseBold(trimmed.replace(/^##\s+/, ''))}</h2>;
-        }
-        if (trimmed.startsWith('# ')) {
-          return <h1 key={idx} className="text-lg font-bold text-ink mt-4 mb-2 text-center">{parseBold(trimmed.replace(/^#\s+/, ''))}</h1>;
-        }
-
-        // List items
-        if (trimmed.match(/^[-*]\s/)) {
-          return (
-             <div key={idx} className="flex gap-2 ml-2">
-               <span className="text-bronze font-bold">•</span>
-               <span>{parseBold(trimmed.replace(/^[-*]\s+/, ''))}</span>
-             </div>
-          );
-        }
-        
-        // Numbered list
-        if (trimmed.match(/^\d+\.\s/)) {
-            const num = trimmed.match(/^\d+/)?.[0];
-            return (
-                <div key={idx} className="flex gap-2 ml-2">
-                  <span className="text-bronze font-bold">{num}.</span>
-                  <span>{parseBold(trimmed.replace(/^\d+\.\s+/, ''))}</span>
-                </div>
-             );
-        }
-
-        // Standard Paragraph
+        if (trimmed.startsWith('### ')) return <h3 key={idx} className="text-sm font-bold text-vermilion border-b border-vermilion/20 pb-1 mt-4">{parseBold(trimmed.replace(/^###\s+/, ''))}</h3>;
+        if (trimmed.startsWith('## ')) return <h2 key={idx} className="text-base font-bold text-ink mt-4 mb-2">{parseBold(trimmed.replace(/^##\s+/, ''))}</h2>;
+        if (trimmed.startsWith('# ')) return <h1 key={idx} className="text-lg font-bold text-ink mt-4 mb-2 text-center">{parseBold(trimmed.replace(/^#\s+/, ''))}</h1>;
+        if (trimmed.match(/^[-*]\s/)) return <div key={idx} className="flex gap-2 ml-2"><span className="text-bronze font-bold">•</span><span>{parseBold(trimmed.replace(/^[-*]\s+/, ''))}</span></div>;
+        if (trimmed.match(/^\d+\.\s/)) { const num = trimmed.match(/^\d+/)?.[0]; return <div key={idx} className="flex gap-2 ml-2"><span className="text-bronze font-bold">{num}.</span><span>{parseBold(trimmed.replace(/^\d+\.\s+/, ''))}</span></div>; }
         return <p key={idx} className="indent-4">{parseBold(trimmed)}</p>;
       })}
     </div>
   );
 };
 
-// 解析 **Bold** 和 *Italic*
 const parseBold = (text: string) => {
   const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
   return parts.map((part, index) => {
-    if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={index} className="font-bold text-ink">{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith('*') && part.endsWith('*')) {
-      return <em key={index} className="italic text-bronze">{part.slice(1, -1)}</em>;
-    }
-    if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={index} className="bg-bronze/10 px-1 rounded text-xs">{part.slice(1, -1)}</code>;
-    }
+    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index} className="font-bold text-ink">{part.slice(2, -2)}</strong>;
+    if (part.startsWith('*') && part.endsWith('*')) return <em key={index} className="italic text-bronze">{part.slice(1, -1)}</em>;
+    if (part.startsWith('`') && part.endsWith('`')) return <code key={index} className="bg-bronze/10 px-1 rounded text-xs">{part.slice(1, -1)}</code>;
     return <span key={index}>{part}</span>;
   });
 };
 
-
 const App: React.FC = () => {
-  const [members, setMembers] = useState<FamilyMember[]>(INITIAL_DATA);
+  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
-  const [isDetailsOpen, setIsDetailsOpen] = useState(false); // 控制详情模态框
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
   const [compareMemberId, setCompareMemberId] = useState<string | null>(null); 
   const [isEditing, setIsEditing] = useState(false);
@@ -127,29 +80,30 @@ const App: React.FC = () => {
   const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
   const [formData, setFormData] = useState<Partial<FamilyMember>>({});
   
-  // Customization States
-  const [familySurname, setFamilySurname] = useState("袁");
+  // Creation States
+  const [isCreatingRoot, setIsCreatingRoot] = useState(false);
+  const [setupSurname, setSetupSurname] = useState("袁");
+  const [setupPassphrase, setSetupPassphrase] = useState("miling");
+
+  // Global Config
+  const [familySurname, setFamilySurname] = useState(() => localStorage.getItem('familySurname') || "袁");
+  const [adminPassphrase, setAdminPassphrase] = useState(() => localStorage.getItem('adminPassphrase') || "miling");
   const [aiConfig, setAiConfig] = useState<AISettings>({
     modelName: 'gemini-3-flash-preview',
     baseUrl: '',
     apiKey: ''
   });
   
-  // Auth System
+  // Auth
   const [isAdmin, setIsAdmin] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [passphraseInput, setPassphraseInput] = useState("");
-  const [adminPassphrase, setAdminPassphrase] = useState("miling"); // 默认密令修改为 miling
 
-  // AI Inquiry States
   const [inquiry, setInquiry] = useState("");
   const [inquiryStyle, setInquiryStyle] = useState<'classical' | 'vernacular'>('classical');
   const [aiResponse, setAiResponse] = useState("");
 
-  // Notification State (Replacement for window.alert)
   const [notification, setNotification] = useState<{message: string, type: 'info' | 'error'} | null>(null);
-
-  // 删除确认模态框
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, memberId: string | null, memberName: string}>({
     isOpen: false, memberId: null, memberName: ''
   });
@@ -158,12 +112,95 @@ const App: React.FC = () => {
   const activeMembers = useMemo(() => members.filter(m => !m.isDeleted), [members]);
   const deletedMembers = useMemo(() => members.filter(m => m.isDeleted), [members]);
 
-  // Auto-dismiss notification
+  const generateId = () => `M-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+  // Save config changes
+  useEffect(() => {
+    localStorage.setItem('familySurname', familySurname);
+  }, [familySurname]);
+
+  useEffect(() => {
+    localStorage.setItem('adminPassphrase', adminPassphrase);
+  }, [adminPassphrase]);
+
+  // OFFLINE SUPPORT: Persist members to localStorage
+  useEffect(() => {
+    if (members.length > 0) {
+      localStorage.setItem('familyMembers_backup', JSON.stringify(members));
+    }
+  }, [members]);
+
+  // --- API ---
+  const fetchMembers = async () => {
+    setIsLoading(true);
+    try {
+      const controller = new AbortController();
+      // Short timeout to fallback to local quickly if server is down
+      const id = setTimeout(() => controller.abort(), 2000); 
+      const res = await fetch('/api/members', { signal: controller.signal });
+      clearTimeout(id);
+
+      if (res.ok) {
+        const data = await res.json();
+        setMembers(data);
+        // Backup fresh data
+        localStorage.setItem('familyMembers_backup', JSON.stringify(data));
+        
+        if (data.length > 0) {
+            // If data exists, sync surname if default
+            const firstMember = data.find((m: FamilyMember) => !m.parentId);
+            if (firstMember && firstMember.name) {
+                if (familySurname === "袁") setFamilySurname(firstMember.name[0]);
+            }
+        }
+      } else {
+        throw new Error("Server error");
+      }
+    } catch (e) {
+      console.warn("API unavailable, loading local backup", e);
+      const local = localStorage.getItem('familyMembers_backup');
+      if (local) {
+        setMembers(JSON.parse(local));
+        if (e instanceof Error && (e.name === 'AbortError' || e.message === 'Load failed')) {
+            showToast("连接超时，已切换至离线模式", "info");
+        }
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const saveMemberToDb = async (member: FamilyMember) => {
+    try {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), 3000); // 3s timeout
+
+      const res = await fetch('/api/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(member),
+        signal: controller.signal
+      });
+      clearTimeout(id);
+
+      if (!res.ok) throw new Error("Save failed");
+      return true;
+    } catch (e) {
+      console.warn("Save failed, using offline fallback");
+      showToast("网络不可用，已保存至本地", "info");
+      // Swallow error to allow offline functionality
+      // The state update in the caller + useEffect will handle persistence
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    fetchMembers();
+  }, []);
+
   useEffect(() => {
     if (notification) {
-      const timer = setTimeout(() => {
-        setNotification(null);
-      }, 3000);
+      const timer = setTimeout(() => setNotification(null), 3000);
       return () => clearTimeout(timer);
     }
   }, [notification]);
@@ -178,7 +215,50 @@ const App: React.FC = () => {
       setShowLogin(false);
       setPassphraseInput("");
     } else {
-      showToast("印鉴不符，无法取得宗主之位。", "error");
+      showToast("印鉴不符", "error");
+    }
+  };
+
+  const handleCreateRoot = async () => {
+    if (isCreatingRoot) return;
+    if (!setupSurname.trim()) {
+        showToast("请填写家族姓氏", "error");
+        return;
+    }
+
+    setIsCreatingRoot(true);
+    try {
+      // 1. Config
+      const surname = setupSurname.trim();
+      setFamilySurname(surname);
+      if (setupPassphrase.trim()) setAdminPassphrase(setupPassphrase.trim());
+      
+      // 2. Member
+      const newId = generateId();
+      const root: FamilyMember = {
+        id: newId,
+        name: `${surname}氏始祖`,
+        birthDate: '1000-01-01',
+        isMarried: false,
+        address: '祖籍地',
+        gender: 'male',
+        parentId: null,
+        isDeleted: false,
+        biography: `此乃${surname}氏开宗立派之始祖，功德无量，泽被后世。`,
+        isHighlight: true
+      };
+      
+      // Attempt save (will fallback to offline if needed)
+      await saveMemberToDb(root);
+      
+      setMembers(prev => [...prev, root]);
+      setIsAdmin(true);
+      showToast("开宗立派成功", "info");
+    } catch (e) {
+      // Should not be reached due to saveMemberToDb swallowing errors
+      console.error(e);
+    } finally {
+      setIsCreatingRoot(false);
     }
   };
 
@@ -189,20 +269,17 @@ const App: React.FC = () => {
       const response = await askAiAboutMember(selectedMember, inquiry, inquiryStyle, aiConfig);
       setAiResponse(response);
     } catch (e) {
-      setAiResponse("灵犀不通，请检查 AI 配置或网络。");
+      setAiResponse("灵犀不通，请检查 AI 配置。");
     } finally {
       setLoadingAi(false);
       setInquiry("");
     }
   };
 
-  // --- 核心交互逻辑 (两段式点击) ---
   const onSelect = (m: FamilyMember) => {
     if (selectedMemberId === m.id) {
-      // 第二次点击同一人：打开详情书卷 (模态框)
       setIsDetailsOpen(true);
     } else {
-      // 第一次点击：仅选中，显示关系图谱上的称谓
       setSelectedMemberId(m.id);
       setIsDetailsOpen(false); 
       setIsEditing(false);
@@ -212,25 +289,28 @@ const App: React.FC = () => {
     }
   };
 
-  // 点击空白处
   const onDeselect = () => {
     if (selectedMemberId === null) return;
     setSelectedMemberId(null);
     setIsDetailsOpen(false);
   };
 
-  const generateId = () => `M-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-
-  const executeDelete = () => {
+  const executeDelete = async () => {
     if (!deleteModal.memberId) return;
     const targetId = deleteModal.memberId;
     const descendantIds = getDescendants(targetId, members);
     const idsToRemove = new Set([targetId, ...descendantIds]);
     
-    setMembers(prev => prev.map(m => 
+    const newMembers = members.map(m => 
       idsToRemove.has(m.id) ? { ...m, isDeleted: true } : m
-    ));
+    ) as FamilyMember[];
+
+    setMembers(newMembers);
     
+    const updates = newMembers.filter(m => idsToRemove.has(m.id));
+    // Optimistic
+    updates.forEach(m => saveMemberToDb(m));
+
     if (selectedMemberId && idsToRemove.has(selectedMemberId)) {
       setSelectedMemberId(null);
       setIsDetailsOpen(false);
@@ -238,24 +318,23 @@ const App: React.FC = () => {
     setDeleteModal({ isOpen: false, memberId: null, memberName: '' });
   };
 
-  const handleRestore = (id: string) => {
-    setMembers(prev => prev.map(m => m.id === id ? { ...m, isDeleted: false } : m));
+  const handleRestore = async (id: string) => {
+    const member = members.find(m => m.id === id);
+    if (member) {
+      const restored = { ...member, isDeleted: false };
+      await saveMemberToDb(restored);
+      setMembers(prev => prev.map(m => m.id === id ? restored : m));
+    }
   };
 
-  // --- Graph Node Handlers (n8n Style) ---
-  const handleAddChildNode = (parentId: string) => {
+  const handleAddChildNode = async (parentId: string) => {
     const newId = generateId();
     const parent = members.find(m => m.id === parentId);
     const newMember: FamilyMember = { 
-      id: newId, 
-      name: "新成员", 
-      birthDate: "", 
-      isMarried: false, 
-      address: parent ? parent.address : "", 
-      gender: "male", 
-      parentId: parentId, 
-      isDeleted: false 
+      id: newId, name: "新成员", birthDate: "", isMarried: false, 
+      address: parent ? parent.address : "", gender: "male", parentId: parentId, isDeleted: false 
     };
+    await saveMemberToDb(newMember);
     setMembers(prev => [...prev, newMember]);
     setSelectedMemberId(newId);
     setFormData(newMember);
@@ -263,30 +342,18 @@ const App: React.FC = () => {
     setIsEditing(true);
   };
 
-  const handleAddParentNode = (childId: string) => {
+  const handleAddParentNode = async (childId: string) => {
     const child = members.find(m => m.id === childId);
     if (!child) return;
-    
     const newId = generateId();
     const newAncestor: FamilyMember = { 
-      id: newId, 
-      name: "先祖讳名", 
-      birthDate: "", 
-      isMarried: false, 
-      address: child.address, 
-      gender: "male", 
-      parentId: child.parentId, // Inherit grandparent if exists
-      isDeleted: false 
+      id: newId, name: "先祖讳名", birthDate: "", isMarried: false, 
+      address: child.address, gender: "male", parentId: child.parentId, isDeleted: false 
     };
-
-    // Update child to point to new parent
     const updatedChild = { ...child, parentId: newId };
-
-    setMembers(prev => [
-      ...prev.map(m => m.id === childId ? updatedChild : m),
-      newAncestor
-    ]);
-
+    await saveMemberToDb(newAncestor);
+    await saveMemberToDb(updatedChild);
+    setMembers(prev => [...prev.map(m => m.id === childId ? updatedChild : m), newAncestor]);
     setSelectedMemberId(newId);
     setFormData(newAncestor);
     setIsDetailsOpen(true);
@@ -295,40 +362,24 @@ const App: React.FC = () => {
 
   const handleDeleteNode = (id: string) => {
     const member = members.find(m => m.id === id);
-    if (member) {
-      setDeleteModal({ isOpen: true, memberId: id, memberName: member.name });
-    }
+    if (member) setDeleteModal({ isOpen: true, memberId: id, memberName: member.name });
   };
 
-
-  // --- 详情页模态框内容渲染 ---
   const renderDetailsModal = () => {
     if (!selectedMember || !isDetailsOpen) return null;
 
     return (
       <div className="absolute inset-0 z-40 flex items-center justify-center p-4 md:p-8 animate-in zoom-in-95 duration-500 pointer-events-none">
-        {/* 背景遮罩 (允许点击穿透关闭) */}
         <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] pointer-events-auto transition-opacity" onClick={() => setIsDetailsOpen(false)}></div>
-        
-        {/* 书卷容器 - 纯正宣纸风格，无黑木，无直角 */}
         <div className="w-full max-w-xl max-h-[85vh] flex flex-col pointer-events-auto relative shadow-[0_25px_50px_-12px_rgba(166,124,82,0.5)] group rounded-[3rem] overflow-hidden">
-           
-           {/* 顶部装裱 - 金色丝绢质感 */}
            <div className="h-10 bg-gradient-to-b from-[#d4b483] to-[#f4ecd8] relative z-20 shadow-sm border-b border-[#c8aa7a]/30 flex items-center justify-center">
               <div className="w-1/3 h-[2px] bg-[#a67c52]/20 rounded-full"></div>
            </div>
-
-           {/* 卷轴纸身 - 纯黄宣纸色 */}
            <div className="bg-[#fdf6e3] flex-1 flex flex-col overflow-hidden relative z-10">
-              {/* 纸张纹理叠加 */}
               <div className="absolute inset-0 pointer-events-none opacity-40 bg-[url('https://www.transparenttextures.com/patterns/rice-paper-2.png')]"></div>
-              
-              {/* 关闭按钮 - 更加隐形 */}
               <button onClick={() => setIsDetailsOpen(false)} className="absolute top-4 right-5 z-50 p-2 text-bronze/40 hover:text-vermilion transition hover:rotate-90 duration-300"><X size={26}/></button>
-
               <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin px-8 py-6 relative">
                  {isEditing ? (
-                   /* 编辑模式 */
                    <div className="pb-8">
                       <h3 className="text-xl font-bold text-vermilion flex items-center gap-2 mb-6 border-b border-vermilion/20 pb-2"><Edit2 size={18}/> 润色谱牒</h3>
                       <div className="space-y-4">
@@ -364,15 +415,16 @@ const App: React.FC = () => {
                               <input type="checkbox" className="accent-vermilion w-4 h-4" checked={formData.isHighlight || false} onChange={e => setFormData({...formData, isHighlight: e.target.checked})} />
                               <span className="flex items-center gap-1"><Crown size={14} className="text-vermilion"/> 设为显赫宗亲 (立传)</span>
                            </label>
-                           <p className="text-[10px] text-bronze pl-6">标记后，此人将在族谱中拥有金龙流光特效，彰显其功绩。</p>
                         </div>
                         <div>
                           <label className="text-xs text-bronze/60 block mb-1">生平概述</label>
                           <textarea className="w-full bg-[#f8f1e0] border border-bronze/20 p-3 h-32 outline-none resize-none leading-relaxed text-ink" value={formData.biography || ''} onChange={e => setFormData({...formData, biography: e.target.value})} />
                         </div>
                         <div className="flex gap-4 pt-4">
-                          <button onClick={() => {
-                            setMembers(prev => prev.map(m => m.id === formData.id ? { ...m, ...formData } as FamilyMember : m));
+                          <button onClick={async () => {
+                            const updated = { ...selectedMember, ...formData } as FamilyMember;
+                            await saveMemberToDb(updated);
+                            setMembers(prev => prev.map(m => m.id === updated.id ? updated : m));
                             setIsEditing(false);
                           }} className="flex-1 bg-vermilion text-white py-2 rounded-full shadow hover:bg-vermilion/90">保存录入</button>
                           <button onClick={() => setIsEditing(false)} className="flex-1 border border-bronze text-bronze py-2 rounded-full hover:bg-white/50">取消</button>
@@ -380,43 +432,28 @@ const App: React.FC = () => {
                       </div>
                    </div>
                  ) : (
-                   /* 阅览模式 */
                    <div className="flex flex-col gap-8 pb-6">
-                      {/* 头部信息 - 极简书法风格 */}
                       <div className="flex flex-col items-center text-center gap-3 pt-2 relative">
                          <div className={`w-20 h-20 rounded-full flex items-center justify-center bg-[#fcf8ed] shadow-sm relative ${selectedMember.isHighlight ? 'border-2 border-[#daa520] shadow-[0_0_15px_rgba(218,165,32,0.4)]' : 'border border-bronze/30'}`}>
                             {selectedMember.isHighlight && <div className="absolute -top-3 -right-2 text-[#daa520] animate-bounce"><Crown size={20} fill="currentColor"/></div>}
                             <span className={`text-4xl font-bold font-serif ${selectedMember.isHighlight ? 'text-[#b8860b]' : 'text-ink'}`}>{selectedMember.name.slice(0,1)}</span>
                          </div>
                          <div>
-                            <h2 className="text-3xl font-bold text-ink mb-2 tracking-[0.2em] font-serif flex items-center justify-center gap-2">
-                                {selectedMember.name}
-                            </h2>
+                            <h2 className="text-3xl font-bold text-ink mb-2 tracking-[0.2em] font-serif flex items-center justify-center gap-2">{selectedMember.name}</h2>
                             <div className="flex justify-center gap-4 text-xs text-bronze uppercase tracking-widest opacity-80">
                                <span>{selectedMember.gender === 'male' ? '乾 (男)' : '坤 (女)'}</span>
                                <span>•</span>
                                <span>{selectedMember.birthDate.split('-')[0]} 年生</span>
-                               {selectedMember.spouseName && (
-                                 <>
-                                  <span>•</span>
-                                  <span>配 {selectedMember.spouseName}</span>
-                                 </>
-                               )}
+                               {selectedMember.spouseName && <><span>•</span><span>配 {selectedMember.spouseName}</span></>}
                             </div>
                          </div>
                       </div>
-
-                      {/* 装饰分割线 */}
                       <div className="flex items-center justify-center gap-2 opacity-30">
                          <div className="h-[1px] w-12 bg-bronze"></div>
                          <div className="w-1.5 h-1.5 rotate-45 border border-bronze bg-transparent"></div>
                          <div className="h-[1px] w-12 bg-bronze"></div>
                       </div>
-
-                      {/* 内容区块 */}
                       <div className="space-y-8 px-2">
-                         
-                         {/* 生平志 - 纯净排版 */}
                          <div>
                             <div className="flex justify-between items-end mb-2">
                               <h3 className="text-base font-bold text-ink/80 font-serif">族志简传</h3>
@@ -425,7 +462,9 @@ const App: React.FC = () => {
                                   setLoadingAi(true);
                                   try {
                                     const bio = await generateBiography(selectedMember, aiConfig);
-                                    setMembers(prev => prev.map(m => m.id === selectedMember.id ? { ...m, biography: bio } : m));
+                                    const updated = { ...selectedMember, biography: bio };
+                                    await saveMemberToDb(updated);
+                                    setMembers(prev => prev.map(m => m.id === selectedMember.id ? updated : m));
                                   } catch (e) {}
                                   setLoadingAi(false);
                                 }} disabled={loadingAi} className="text-[10px] text-bronze hover:text-vermilion flex items-center gap-1 transition-colors"><Sparkles size={12}/> {loadingAi ? '撰写中...' : 'AI 续写'}</button>
@@ -435,8 +474,6 @@ const App: React.FC = () => {
                                <MarkdownRenderer content={selectedMember.biography || "暂无详细记载。"} />
                             </div>
                          </div>
-
-                         {/* AI 问答 - 融入纸张 */}
                          <div className="bg-[#f8f1e0] p-4 rounded-xl border border-bronze/10">
                             <div className="flex justify-between items-center mb-3">
                                <h4 className="text-xs font-bold text-bronze/70 uppercase">灵犀询问</h4>
@@ -456,8 +493,6 @@ const App: React.FC = () => {
                               </div>
                             )}
                          </div>
-
-                         {/* 亲缘推演 */}
                          <div className="pt-2">
                             <div className="flex justify-between items-center mb-3">
                                <h3 className="text-base font-bold text-ink/80 font-serif">亲缘推演</h3>
@@ -495,8 +530,6 @@ const App: React.FC = () => {
                             )}
                          </div>
                       </div>
-
-                      {/* 底部管理栏 (仅管理员) */}
                       {isAdmin && (
                          <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-bronze/10 opacity-80 hover:opacity-100 transition px-2">
                             <button onClick={() => { setFormData(selectedMember); setIsEditing(true); }} className="text-bronze hover:text-vermilion text-xs flex flex-col items-center gap-1 group"><div className="p-2 bg-[#f8f1e0] rounded-full group-hover:bg-white transition"><Edit2 size={14}/></div>润色谱牒</button>
@@ -507,12 +540,9 @@ const App: React.FC = () => {
                  )}
               </div>
            </div>
-
-           {/* 底部装裱 - 金色丝绢质感 */}
            <div className="h-10 bg-gradient-to-t from-[#d4b483] to-[#f4ecd8] relative z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] border-t border-[#c8aa7a]/30 flex items-center justify-center">
               <div className="w-1/3 h-[2px] bg-[#a67c52]/20 rounded-full"></div>
            </div>
-           
         </div>
       </div>
     );
@@ -520,10 +550,6 @@ const App: React.FC = () => {
 
   return (
     <div className="w-full h-full text-ink overflow-hidden relative font-serif flex flex-col bg-parchment">
-      {/* 
-         Removed onClick={onDeselect} from here to prevent event bubbling issues.
-         onDeselect is now passed to FamilyGraph and handled on the background layer explicitly.
-      */}
       <div className="absolute inset-0 z-0">
         <FamilyGraph 
           familySurname={familySurname} 
@@ -538,13 +564,11 @@ const App: React.FC = () => {
         />
       </div>
 
-      {/* Header UI */}
       <div className="absolute top-2 left-2 md:top-4 md:left-4 z-20 pointer-events-none flex flex-col gap-2 md:gap-3 w-full max-w-[calc(100%-1rem)]">
         <div className="glass-panel px-4 md:px-8 py-2 md:py-4 rounded-sm flex flex-col pointer-events-auto border-l-[4px] md:border-l-[6px] border-l-vermilion shadow-xl w-fit">
              <span className="font-bold tracking-[0.2em] md:tracking-[0.4em] text-lg md:text-2xl text-ink leading-tight">华夏族谱录</span>
              <span className="text-[7px] md:text-[9px] text-bronze font-sans uppercase tracking-widest font-medium opacity-70">Ancestral Ledger</span>
         </div>
-        
         <div className="pointer-events-auto w-fit flex gap-2">
           {isAdmin ? (
             <div className="bg-vermilion/90 text-white px-3 py-1.5 rounded-sm flex items-center gap-2 text-[10px] font-bold shadow-lg">
@@ -559,7 +583,52 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Bottom Toolbar */}
+      {activeMembers.length === 0 && !isLoading && (
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none">
+            <div className="glass-panel p-8 rounded-xl shadow-2xl flex flex-col items-center gap-4 pointer-events-auto animate-in fade-in zoom-in duration-500 border-2 border-bronze/30 max-w-sm w-full bg-[#fdf6e3]">
+                <div className="w-16 h-16 bg-vermilion text-white rounded-full flex items-center justify-center mb-2 shadow-lg border-2 border-white">
+                  <Scroll size={32} />
+                </div>
+                <h2 className="text-xl font-bold text-ink">开宗立派</h2>
+                <p className="text-xs text-bronze/80 mb-2 text-center max-w-[200px]">当前暂无族人记录。请确立始祖，并设置宗主密令。</p>
+                
+                <div className="w-full space-y-4 my-2">
+                   <div>
+                      <label className="text-[10px] font-bold text-bronze block mb-1">家族姓氏</label>
+                      <input 
+                        type="text" 
+                        value={setupSurname}
+                        onChange={(e) => setSetupSurname(e.target.value)}
+                        placeholder="如：袁"
+                        className="w-full bg-white border border-bronze/20 p-2 text-center font-bold text-lg outline-none focus:border-vermilion rounded-sm transition-colors text-ink placeholder:text-bronze/30"
+                        maxLength={2}
+                        onKeyDown={e => e.key === 'Enter' && handleCreateRoot()}
+                      />
+                   </div>
+                   <div>
+                      <label className="text-[10px] font-bold text-bronze block mb-1">设置宗主密令 (管理员密码)</label>
+                      <input 
+                        type="text" 
+                        value={setupPassphrase}
+                        onChange={(e) => setSetupPassphrase(e.target.value)}
+                        className="w-full bg-white border border-bronze/20 p-2 text-center outline-none focus:border-vermilion rounded-sm transition-colors text-ink font-serif"
+                        onKeyDown={e => e.key === 'Enter' && handleCreateRoot()}
+                      />
+                   </div>
+                </div>
+
+                <button 
+                  onClick={handleCreateRoot}
+                  disabled={isCreatingRoot || !setupSurname}
+                  className="w-full bg-vermilion text-white py-2.5 rounded-full font-bold shadow-lg hover:bg-vermilion/90 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed mt-2"
+                >
+                  {isCreatingRoot ? <Loader2 size={16} className="animate-spin" /> : null} 
+                  {isCreatingRoot ? '正在立谱...' : `确立 ${setupSurname || '某'} 氏始祖`}
+                </button>
+            </div>
+        </div>
+      )}
+
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
          <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-3 md:gap-6 border-2 border-bronze/30 shadow-2xl bg-white/95 scale-90 md:scale-100">
             <button onClick={() => {
@@ -574,8 +643,13 @@ const App: React.FC = () => {
                   const reader = new FileReader();
                   if (e.target.files?.[0]) {
                     reader.readAsText(e.target.files[0], "UTF-8");
-                    reader.onload = evt => {
-                      try { setMembers(JSON.parse(evt.target?.result as string)); } catch { showToast("古籍破损，无法辨识。", "error"); }
+                    reader.onload = async evt => {
+                      try { 
+                        const importedMembers = JSON.parse(evt.target?.result as string);
+                        setMembers(importedMembers);
+                        await Promise.all(importedMembers.map((m: FamilyMember) => saveMemberToDb(m)));
+                        showToast("古籍载入成功", "info");
+                      } catch { showToast("古籍破损，无法辨识。", "error"); }
                     };
                   }
                }} />
@@ -590,7 +664,6 @@ const App: React.FC = () => {
                 </button>
                </>
             )}
-            {/* 阅览按钮 */}
             <button 
               onClick={() => selectedMemberId ? setIsDetailsOpen(true) : showToast("请先在族谱中选择一位宗亲", "info")} 
               className={`p-2 transition ${isDetailsOpen ? 'text-vermilion' : 'text-bronze'}`} 
@@ -601,10 +674,8 @@ const App: React.FC = () => {
          </div>
       </div>
 
-      {/* Render Modals */}
       {renderDetailsModal()}
 
-      {/* Authentication Modal */}
       {showLogin && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-300">
           <div className="glass-panel p-6 md:p-10 max-w-sm w-full bg-parchment text-center border-4 border-bronze/50 shadow-2xl">
@@ -626,7 +697,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Settings Modal */}
       {isSettingsOpen && isAdmin && (
         <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4 animate-in fade-in">
           <div className="glass-panel p-6 md:p-8 max-w-md w-full bg-parchment-light border-2 border-bronze shadow-2xl relative max-h-[90vh] overflow-y-auto">
@@ -681,7 +751,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Recycle Bin Modal */}
       {isRecycleBinOpen && isAdmin && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 animate-in fade-in">
            <div className="glass-panel p-6 max-w-lg w-full bg-parchment border-2 border-bronze shadow-2xl relative flex flex-col max-h-[80vh]">
@@ -706,7 +775,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Delete Confirmation Modal */}
       {deleteModal.isOpen && (
         <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in">
            <div className="glass-panel p-6 max-w-sm w-full bg-parchment text-center border-4 border-vermilion/50 shadow-2xl relative">
@@ -725,7 +793,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Custom Toast Notification (Replaces window.alert) */}
       {notification && (
          <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-none">
             <div className={`glass-panel px-6 py-3 rounded-full border-2 shadow-2xl flex items-center gap-3 backdrop-blur-md ${notification.type === 'error' ? 'border-vermilion/50 bg-[#fff5f5]/95 text-vermilion' : 'border-bronze/50 bg-[#fcf8ed]/95 text-ink'}`}>

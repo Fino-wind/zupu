@@ -1,11 +1,6 @@
 # 华夏族谱录 (ChronoGenealogy)
 
-一个极具古风感的AI家族族谱管理系统，融合了中国传统宗法文化与现代 Web 技术。系统支持交互式数据可视化、AI 智能关系推演及生平传记生成。
-<img width="2738" height="1524" alt="image" src="https://github.com/user-attachments/assets/b391ce33-e856-407c-a862-4fe851005317" />
-<img width="2604" height="1476" alt="image" src="https://github.com/user-attachments/assets/a40271c8-c4a3-4b8d-8283-bb6639f2dcfa" />
-<img width="2604" height="1476" alt="image" src="https://github.com/user-attachments/assets/6dda0c47-6acd-47bf-b202-30c42884ff84" />
-<img width="2604" height="1476" alt="image" src="https://github.com/user-attachments/assets/c31e1662-7e8c-49a3-997c-6cea21535247" />
-
+一个极具未来感的家族族谱管理系统，融合了中国传统宗法文化与现代 Web 技术。系统支持交互式数据可视化、AI 智能关系推演及生平传记生成。
 
 ## ✨ 主要功能
 
@@ -31,7 +26,7 @@
 
 ### 前置要求
 
-本项目依赖 Google Gemini API 进行智能分析。请确保您拥有有效的 `API_KEY`。（也支持自定义api)
+本项目依赖 Google Gemini API 进行智能分析。请确保您拥有有效的 `API_KEY`。
 
 ### 1. 开发环境运行 (端口 5021)
 
