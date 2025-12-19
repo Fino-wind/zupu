@@ -1,4 +1,5 @@
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
+
 WORKDIR /app
 
 # 先复制依赖文件（哪个存在用哪个）
@@ -21,3 +22,4 @@ COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 8888
 CMD ["nginx", "-g", "daemon off;"]
+
