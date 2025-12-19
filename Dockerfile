@@ -20,9 +20,12 @@ RUN apk add --no-cache nginx
 COPY package.json ./
 RUN npm install --omit=dev
 
-# 后端文件
+# 后端文件 + 启动脚本
 COPY server.js ./
 COPY start.sh ./
+
+# 确保脚本可执行（避免权限坑）
+RUN chmod +x /app/start.sh
 
 # SQLite 数据目录（建议 volume 挂载到 /app/data）
 RUN mkdir -p /app/data
@@ -35,5 +38,3 @@ EXPOSE 8888
 ENV NODE_ENV=production
 
 CMD ["sh", "/app/start.sh"]
-
-
