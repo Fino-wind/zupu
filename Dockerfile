@@ -34,4 +34,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 8888
 ENV NODE_ENV=production
 
-CMD ["./start.sh"]
+CMD ["sh", "/app/start.sh"]
+
+
