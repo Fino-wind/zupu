@@ -6,7 +6,7 @@ import {
   Heart, Lock, Unlock, ShieldCheck, Send, MessageCircle, 
   X, Layout, Key, Loader2, AlertTriangle, ArchiveRestore, 
   Settings, MapPin, BookOpen, User, Crown, ArrowUpCircle,
-  Fingerprint
+  Fingerprint, Bell
 } from 'lucide-react';
 import { analyzeRelationship, generateBiography, askAiAboutMember, AISettings } from './services/geminiService';
 
@@ -146,6 +146,9 @@ const App: React.FC = () => {
   const [inquiryStyle, setInquiryStyle] = useState<'classical' | 'vernacular'>('classical');
   const [aiResponse, setAiResponse] = useState("");
 
+  // Notification State (Replacement for window.alert)
+  const [notification, setNotification] = useState<{message: string, type: 'info' | 'error'} | null>(null);
+
   // 删除确认模态框
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, memberId: string | null, memberName: string}>({
     isOpen: false, memberId: null, memberName: ''
@@ -155,13 +158,27 @@ const App: React.FC = () => {
   const activeMembers = useMemo(() => members.filter(m => !m.isDeleted), [members]);
   const deletedMembers = useMemo(() => members.filter(m => m.isDeleted), [members]);
 
+  // Auto-dismiss notification
+  useEffect(() => {
+    if (notification) {
+      const timer = setTimeout(() => {
+        setNotification(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [notification]);
+
+  const showToast = (message: string, type: 'info' | 'error' = 'info') => {
+    setNotification({ message, type });
+  };
+
   const handleLogin = () => {
     if (passphraseInput === adminPassphrase) {
       setIsAdmin(true);
       setShowLogin(false);
       setPassphraseInput("");
     } else {
-      alert("印鉴不符，无法取得宗主之位。");
+      showToast("印鉴不符，无法取得宗主之位。", "error");
     }
   };
 
@@ -482,8 +499,8 @@ const App: React.FC = () => {
                       {/* 底部管理栏 (仅管理员) */}
                       {isAdmin && (
                          <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-bronze/10 opacity-80 hover:opacity-100 transition px-2">
-                            <button onClick={() => { setFormData(selectedMember); setIsEditing(true); }} className="text-bronze hover:text-vermilion text-xs flex flex-col items-center gap-1 group"><div className="p-2 bg-[#f8f1e0] rounded-full group-hover:bg-white transition"><Edit2 size={14}/></div>润色</button>
-                            <button onClick={() => handleDeleteNode(selectedMember.id)} className="text-bronze hover:text-vermilion text-xs flex flex-col items-center gap-1 group"><div className="p-2 bg-[#f8f1e0] rounded-full group-hover:bg-white transition"><Trash2 size={14}/></div>斩断</button>
+                            <button onClick={() => { setFormData(selectedMember); setIsEditing(true); }} className="text-bronze hover:text-vermilion text-xs flex flex-col items-center gap-1 group"><div className="p-2 bg-[#f8f1e0] rounded-full group-hover:bg-white transition"><Edit2 size={14}/></div>润色谱牒</button>
+                            <button onClick={() => handleDeleteNode(selectedMember.id)} className="text-bronze hover:text-vermilion text-xs flex flex-col items-center gap-1 group"><div className="p-2 bg-[#f8f1e0] rounded-full group-hover:bg-white transition"><Trash2 size={14}/></div>斩断此脉</button>
                          </div>
                       )}
                    </div>
@@ -558,7 +575,7 @@ const App: React.FC = () => {
                   if (e.target.files?.[0]) {
                     reader.readAsText(e.target.files[0], "UTF-8");
                     reader.onload = evt => {
-                      try { setMembers(JSON.parse(evt.target?.result as string)); } catch { alert("古籍破损。"); }
+                      try { setMembers(JSON.parse(evt.target?.result as string)); } catch { showToast("古籍破损，无法辨识。", "error"); }
                     };
                   }
                }} />
@@ -575,7 +592,7 @@ const App: React.FC = () => {
             )}
             {/* 阅览按钮 */}
             <button 
-              onClick={() => selectedMemberId ? setIsDetailsOpen(true) : alert("请先在族谱中选择一位宗亲")} 
+              onClick={() => selectedMemberId ? setIsDetailsOpen(true) : showToast("请先在族谱中选择一位宗亲", "info")} 
               className={`p-2 transition ${isDetailsOpen ? 'text-vermilion' : 'text-bronze'}`} 
               title="查阅详请"
             >
@@ -706,6 +723,16 @@ const App: React.FC = () => {
               </div>
            </div>
         </div>
+      )}
+
+      {/* Custom Toast Notification (Replaces window.alert) */}
+      {notification && (
+         <div className="absolute top-10 left-1/2 -translate-x-1/2 z-[100] animate-in slide-in-from-top-4 fade-in duration-300 pointer-events-none">
+            <div className={`glass-panel px-6 py-3 rounded-full border-2 shadow-2xl flex items-center gap-3 backdrop-blur-md ${notification.type === 'error' ? 'border-vermilion/50 bg-[#fff5f5]/95 text-vermilion' : 'border-bronze/50 bg-[#fcf8ed]/95 text-ink'}`}>
+               {notification.type === 'error' ? <AlertTriangle size={18} /> : <Bell size={18} className="text-bronze"/>}
+               <span className="font-bold text-sm tracking-wide font-serif">{notification.message}</span>
+            </div>
+         </div>
       )}
     </div>
   );
