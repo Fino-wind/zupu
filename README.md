@@ -1,6 +1,6 @@
 # 华夏族谱录 (ChronoGenealogy)
 
-一个极具古风感的家族族谱管理系统，融合了中国传统宗法文化与现代 Web 技术。系统支持交互式数据可视化、AI 智能关系推演及生平传记生成。
+一个极具未来感的家族族谱管理系统，融合了中国传统宗法文化与现代 Web 技术。系统支持交互式数据可视化、AI 智能关系推演及生平传记生成。
 
 ## ✨ 主要功能
 
@@ -55,7 +55,7 @@ npm run dev
 
 ```dockerfile
 # --- 构建阶段 ---
-FROM node:20-alpine as builder
+FROM node:18-alpine as builder
 WORKDIR /app
 # 复制依赖配置
 COPY package*.json ./

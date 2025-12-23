@@ -1,90 +1,37 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { FamilyMember } from './types';
 import FamilyGraph from './components/FamilyGraph';
+import DetailsModal from './components/DetailsModal';
+import { useGenealogy } from './hooks/useGenealogy';
 import { 
   Plus, Trash2, Edit2, Save, Upload, Sparkles, 
   Heart, Lock, Unlock, ShieldCheck, Send, MessageCircle, 
   X, Layout, Key, Loader2, AlertTriangle, ArchiveRestore, 
   Settings, MapPin, BookOpen, User, Crown, ArrowUpCircle,
-  Fingerprint, Bell, Scroll
+  Fingerprint, Bell, Scroll, UserPlus
 } from 'lucide-react';
-import { analyzeRelationship, generateBiography, askAiAboutMember, AISettings } from './services/geminiService';
-
-// 提取递归查找后代的逻辑
-const getDescendants = (parentId: string, all: FamilyMember[]): string[] => {
-  const children = all.filter(m => m.parentId === parentId && !m.isDeleted);
-  let ids = children.map(c => c.id);
-  children.forEach(c => {
-    ids = [...ids, ...getDescendants(c.id, all)];
-  });
-  return ids;
-};
-
-// 计算年龄
-const calculateAge = (birthDate: string): number | string => {
-  if (!birthDate) return '未知';
-  const birth = new Date(birthDate);
-  const now = new Date();
-  let age = now.getFullYear() - birth.getFullYear();
-  const m = now.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) {
-    age--;
-  }
-  return age;
-};
-
-// --- 增强版 Markdown 渲染组件 ---
-const MarkdownRenderer = ({ content }: { content: string }) => {
-  if (!content) return null;
-  const normalized = content.replace(/^(#{1,6}\s)/gm, '\n$1');
-  const blocks = normalized.split('\n');
-  return (
-    <div className="space-y-3 text-ink/90 leading-relaxed text-justify">
-      {blocks.map((line, idx) => {
-        const trimmed = line.trim();
-        if (!trimmed) return null;
-        if (trimmed.startsWith('### ')) return <h3 key={idx} className="text-sm font-bold text-vermilion border-b border-vermilion/20 pb-1 mt-4">{parseBold(trimmed.replace(/^###\s+/, ''))}</h3>;
-        if (trimmed.startsWith('## ')) return <h2 key={idx} className="text-base font-bold text-ink mt-4 mb-2">{parseBold(trimmed.replace(/^##\s+/, ''))}</h2>;
-        if (trimmed.startsWith('# ')) return <h1 key={idx} className="text-lg font-bold text-ink mt-4 mb-2 text-center">{parseBold(trimmed.replace(/^#\s+/, ''))}</h1>;
-        if (trimmed.match(/^[-*]\s/)) return <div key={idx} className="flex gap-2 ml-2"><span className="text-bronze font-bold">•</span><span>{parseBold(trimmed.replace(/^[-*]\s+/, ''))}</span></div>;
-        if (trimmed.match(/^\d+\.\s/)) { const num = trimmed.match(/^\d+/)?.[0]; return <div key={idx} className="flex gap-2 ml-2"><span className="text-bronze font-bold">{num}.</span><span>{parseBold(trimmed.replace(/^\d+\.\s+/, ''))}</span></div>; }
-        return <p key={idx} className="indent-4">{parseBold(trimmed)}</p>;
-      })}
-    </div>
-  );
-};
-
-const parseBold = (text: string) => {
-  const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
-  return parts.map((part, index) => {
-    if (part.startsWith('**') && part.endsWith('**')) return <strong key={index} className="font-bold text-ink">{part.slice(2, -2)}</strong>;
-    if (part.startsWith('*') && part.endsWith('*')) return <em key={index} className="italic text-bronze">{part.slice(1, -1)}</em>;
-    if (part.startsWith('`') && part.endsWith('`')) return <code key={index} className="bg-bronze/10 px-1 rounded text-xs">{part.slice(1, -1)}</code>;
-    return <span key={index}>{part}</span>;
-  });
-};
+import { AISettings } from './services/geminiService';
 
 const App: React.FC = () => {
-  const [members, setMembers] = useState<FamilyMember[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Use Custom Hook for Data Logic
+  const { 
+    members, 
+    activeMembers, 
+    deletedMembers, 
+    isLoading, 
+    saveMember, 
+    deleteMemberNodes, 
+    restoreMemberNode,
+    refresh 
+  } = useGenealogy();
+
+  // Local UI State
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
-
-  const [compareMemberId, setCompareMemberId] = useState<string | null>(null); 
-  const [isEditing, setIsEditing] = useState(false);
-  const [aiAnalysis, setAiAnalysis] = useState<string>("");
-  const [analysisStyle, setAnalysisStyle] = useState<'traditional' | 'modern'>('traditional');
-  const [loadingAi, setLoadingAi] = useState(false);
-  const [loadingDeduction, setLoadingDeduction] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
-  const [formData, setFormData] = useState<Partial<FamilyMember>>({});
+  const [startEditing, setStartEditing] = useState(false);
   
-  // Creation States
-  const [isCreatingRoot, setIsCreatingRoot] = useState(false);
-  const [setupSurname, setSetupSurname] = useState("袁");
-  const [setupPassphrase, setSetupPassphrase] = useState("miling");
-
   // Global Config
   const [familySurname, setFamilySurname] = useState(() => localStorage.getItem('familySurname') || "袁");
   const [adminPassphrase, setAdminPassphrase] = useState(() => localStorage.getItem('adminPassphrase') || "miling");
@@ -99,104 +46,28 @@ const App: React.FC = () => {
   const [showLogin, setShowLogin] = useState(false);
   const [passphraseInput, setPassphraseInput] = useState("");
 
-  const [inquiry, setInquiry] = useState("");
-  const [inquiryStyle, setInquiryStyle] = useState<'classical' | 'vernacular'>('classical');
-  const [aiResponse, setAiResponse] = useState("");
-
   const [notification, setNotification] = useState<{message: string, type: 'info' | 'error'} | null>(null);
   const [deleteModal, setDeleteModal] = useState<{isOpen: boolean, memberId: string | null, memberName: string}>({
     isOpen: false, memberId: null, memberName: ''
   });
 
-  const selectedMember = useMemo(() => members.find(m => m.id === selectedMemberId), [members, selectedMemberId]);
-  const activeMembers = useMemo(() => members.filter(m => !m.isDeleted), [members]);
-  const deletedMembers = useMemo(() => members.filter(m => m.isDeleted), [members]);
+  const selectedMember = useMemo(() => members.find(m => m.id === selectedMemberId) || null, [members, selectedMemberId]);
 
   const generateId = () => `M-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
   // Save config changes
+  useEffect(() => { localStorage.setItem('familySurname', familySurname); }, [familySurname]);
+  useEffect(() => { localStorage.setItem('adminPassphrase', adminPassphrase); }, [adminPassphrase]);
+
+  // Set default surname if loaded from data
   useEffect(() => {
-    localStorage.setItem('familySurname', familySurname);
-  }, [familySurname]);
-
-  useEffect(() => {
-    localStorage.setItem('adminPassphrase', adminPassphrase);
-  }, [adminPassphrase]);
-
-  // OFFLINE SUPPORT: Persist members to localStorage
-  useEffect(() => {
-    if (members.length > 0) {
-      localStorage.setItem('familyMembers_backup', JSON.stringify(members));
-    }
-  }, [members]);
-
-  // --- API ---
-  const fetchMembers = async () => {
-    setIsLoading(true);
-    try {
-      const controller = new AbortController();
-      // Short timeout to fallback to local quickly if server is down
-      const id = setTimeout(() => controller.abort(), 2000); 
-      const res = await fetch('/api/members', { signal: controller.signal });
-      clearTimeout(id);
-
-      if (res.ok) {
-        const data = await res.json();
-        setMembers(data);
-        // Backup fresh data
-        localStorage.setItem('familyMembers_backup', JSON.stringify(data));
-        
-        if (data.length > 0) {
-            // If data exists, sync surname if default
-            const firstMember = data.find((m: FamilyMember) => !m.parentId);
-            if (firstMember && firstMember.name) {
-                if (familySurname === "袁") setFamilySurname(firstMember.name[0]);
-            }
-        }
-      } else {
-        throw new Error("Server error");
+    if (activeMembers.length > 0 && familySurname === "袁") {
+      const root = activeMembers.find(m => !m.parentId);
+      if (root && root.name) {
+        // Only set if we are still on default
       }
-    } catch (e) {
-      console.warn("API unavailable, loading local backup", e);
-      const local = localStorage.getItem('familyMembers_backup');
-      if (local) {
-        setMembers(JSON.parse(local));
-        if (e instanceof Error && (e.name === 'AbortError' || e.message === 'Load failed')) {
-            showToast("连接超时，已切换至离线模式", "info");
-        }
-      }
-    } finally {
-      setIsLoading(false);
     }
-  };
-
-  const saveMemberToDb = async (member: FamilyMember) => {
-    try {
-      const controller = new AbortController();
-      const id = setTimeout(() => controller.abort(), 3000); // 3s timeout
-
-      const res = await fetch('/api/members', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(member),
-        signal: controller.signal
-      });
-      clearTimeout(id);
-
-      if (!res.ok) throw new Error("Save failed");
-      return true;
-    } catch (e) {
-      console.warn("Save failed, using offline fallback");
-      showToast("网络不可用，已保存至本地", "info");
-      // Swallow error to allow offline functionality
-      // The state update in the caller + useEffect will handle persistence
-      return false;
-    }
-  };
-
-  useEffect(() => {
-    fetchMembers();
-  }, []);
+  }, [activeMembers, familySurname]);
 
   useEffect(() => {
     if (notification) {
@@ -219,130 +90,52 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCreateRoot = async () => {
-    if (isCreatingRoot) return;
-    if (!setupSurname.trim()) {
-        showToast("请填写家族姓氏", "error");
-        return;
-    }
-
-    setIsCreatingRoot(true);
-    try {
-      // 1. Config
-      const surname = setupSurname.trim();
-      setFamilySurname(surname);
-      if (setupPassphrase.trim()) setAdminPassphrase(setupPassphrase.trim());
-      
-      // 2. Member
-      const newId = generateId();
-      const root: FamilyMember = {
-        id: newId,
-        name: `${surname}氏始祖`,
-        birthDate: '1000-01-01',
-        isMarried: false,
-        address: '祖籍地',
-        gender: 'male',
-        parentId: null,
-        isDeleted: false,
-        biography: `此乃${surname}氏开宗立派之始祖，功德无量，泽被后世。`,
-        isHighlight: true
-      };
-      
-      // Attempt save (will fallback to offline if needed)
-      await saveMemberToDb(root);
-      
-      setMembers(prev => [...prev, root]);
-      setIsAdmin(true);
-      showToast("开宗立派成功", "info");
-    } catch (e) {
-      // Should not be reached due to saveMemberToDb swallowing errors
-      console.error(e);
-    } finally {
-      setIsCreatingRoot(false);
-    }
-  };
-
-  const handleAiInquiry = async () => {
-    if (!selectedMember || !inquiry.trim()) return;
-    setLoadingAi(true);
-    try {
-      const response = await askAiAboutMember(selectedMember, inquiry, inquiryStyle, aiConfig);
-      setAiResponse(response);
-    } catch (e) {
-      setAiResponse("灵犀不通，请检查 AI 配置。");
-    } finally {
-      setLoadingAi(false);
-      setInquiry("");
-    }
-  };
-
   const onSelect = (m: FamilyMember) => {
     if (selectedMemberId === m.id) {
       setIsDetailsOpen(true);
     } else {
       setSelectedMemberId(m.id);
+      setStartEditing(false);
       setIsDetailsOpen(false); 
-      setIsEditing(false);
-      setAiAnalysis("");
-      setAiResponse("");
-      setCompareMemberId(null);
     }
   };
 
   const onDeselect = () => {
     if (selectedMemberId === null) return;
     setSelectedMemberId(null);
+    setStartEditing(false);
     setIsDetailsOpen(false);
   };
 
   const executeDelete = async () => {
     if (!deleteModal.memberId) return;
-    const targetId = deleteModal.memberId;
-    const descendantIds = getDescendants(targetId, members);
-    const idsToRemove = new Set([targetId, ...descendantIds]);
-    
-    const newMembers = members.map(m => 
-      idsToRemove.has(m.id) ? { ...m, isDeleted: true } : m
-    ) as FamilyMember[];
-
-    setMembers(newMembers);
-    
-    const updates = newMembers.filter(m => idsToRemove.has(m.id));
-    // Optimistic
-    updates.forEach(m => saveMemberToDb(m));
-
-    if (selectedMemberId && idsToRemove.has(selectedMemberId)) {
+    await deleteMemberNodes(deleteModal.memberId);
+    if (selectedMemberId === deleteModal.memberId) {
       setSelectedMemberId(null);
       setIsDetailsOpen(false);
     }
     setDeleteModal({ isOpen: false, memberId: null, memberName: '' });
+    showToast("已斩断血脉，移至宗祠秘档");
   };
 
-  const handleRestore = async (id: string) => {
-    const member = members.find(m => m.id === id);
-    if (member) {
-      const restored = { ...member, isDeleted: false };
-      await saveMemberToDb(restored);
-      setMembers(prev => prev.map(m => m.id === id ? restored : m));
-    }
-  };
-
-  const handleAddChildNode = async (parentId: string) => {
+  const handleAddChildNode = (parentId: string) => {
     const newId = generateId();
     const parent = members.find(m => m.id === parentId);
     const newMember: FamilyMember = { 
       id: newId, name: "新成员", birthDate: "", isMarried: false, 
       address: parent ? parent.address : "", gender: "male", parentId: parentId, isDeleted: false 
     };
-    await saveMemberToDb(newMember);
-    setMembers(prev => [...prev, newMember]);
+    
+    // Do not await here to ensure UI updates immediately (Optimistic UI)
+    // The hook handles the async API call in background
+    saveMember(newMember);
+    
     setSelectedMemberId(newId);
-    setFormData(newMember);
+    setStartEditing(true); 
     setIsDetailsOpen(true);
-    setIsEditing(true);
   };
 
-  const handleAddParentNode = async (childId: string) => {
+  const handleAddParentNode = (childId: string) => {
     const child = members.find(m => m.id === childId);
     if (!child) return;
     const newId = generateId();
@@ -351,201 +144,19 @@ const App: React.FC = () => {
       address: child.address, gender: "male", parentId: child.parentId, isDeleted: false 
     };
     const updatedChild = { ...child, parentId: newId };
-    await saveMemberToDb(newAncestor);
-    await saveMemberToDb(updatedChild);
-    setMembers(prev => [...prev.map(m => m.id === childId ? updatedChild : m), newAncestor]);
+
+    // Do not await
+    saveMember(newAncestor);
+    saveMember(updatedChild);
+
     setSelectedMemberId(newId);
-    setFormData(newAncestor);
+    setStartEditing(true); 
     setIsDetailsOpen(true);
-    setIsEditing(true);
   };
 
   const handleDeleteNode = (id: string) => {
     const member = members.find(m => m.id === id);
     if (member) setDeleteModal({ isOpen: true, memberId: id, memberName: member.name });
-  };
-
-  const renderDetailsModal = () => {
-    if (!selectedMember || !isDetailsOpen) return null;
-
-    return (
-      <div className="absolute inset-0 z-40 flex items-center justify-center p-4 md:p-8 animate-in zoom-in-95 duration-500 pointer-events-none">
-        <div className="absolute inset-0 bg-black/30 backdrop-blur-[2px] pointer-events-auto transition-opacity" onClick={() => setIsDetailsOpen(false)}></div>
-        <div className="w-full max-w-xl max-h-[85vh] flex flex-col pointer-events-auto relative shadow-[0_25px_50px_-12px_rgba(166,124,82,0.5)] group rounded-[3rem] overflow-hidden">
-           <div className="h-10 bg-gradient-to-b from-[#d4b483] to-[#f4ecd8] relative z-20 shadow-sm border-b border-[#c8aa7a]/30 flex items-center justify-center">
-              <div className="w-1/3 h-[2px] bg-[#a67c52]/20 rounded-full"></div>
-           </div>
-           <div className="bg-[#fdf6e3] flex-1 flex flex-col overflow-hidden relative z-10">
-              <div className="absolute inset-0 pointer-events-none opacity-40 bg-[url('https://www.transparenttextures.com/patterns/rice-paper-2.png')]"></div>
-              <button onClick={() => setIsDetailsOpen(false)} className="absolute top-4 right-5 z-50 p-2 text-bronze/40 hover:text-vermilion transition hover:rotate-90 duration-300"><X size={26}/></button>
-              <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin px-8 py-6 relative">
-                 {isEditing ? (
-                   <div className="pb-8">
-                      <h3 className="text-xl font-bold text-vermilion flex items-center gap-2 mb-6 border-b border-vermilion/20 pb-2"><Edit2 size={18}/> 润色谱牒</h3>
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-xs text-bronze/60 block mb-1">姓名</label>
-                            <input className="w-full bg-[#f8f1e0] border-b border-bronze/40 p-2 outline-none font-bold text-lg text-ink" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} />
-                          </div>
-                           <div>
-                            <label className="text-xs text-bronze/60 block mb-1">礼位</label>
-                            <select className="w-full bg-[#f8f1e0] border-b border-bronze/40 p-2 outline-none text-ink" value={formData.gender} onChange={e => setFormData({...formData, gender: e.target.value as any})}>
-                              <option value="male">乾 (男)</option>
-                              <option value="female">坤 (女)</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-xs text-bronze/60 block mb-1">连理配偶</label>
-                          <input className="w-full bg-[#f8f1e0] border-b border-bronze/40 p-2 outline-none text-ink" value={formData.spouseName || ''} onChange={e => setFormData({...formData, spouseName: e.target.value})} />
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="text-xs text-bronze/60 block mb-1">诞辰</label>
-                            <input type="date" className="w-full bg-[#f8f1e0] border-b border-bronze/40 p-2 outline-none text-ink" value={formData.birthDate || ''} onChange={e => setFormData({...formData, birthDate: e.target.value})} />
-                          </div>
-                          <div>
-                            <label className="text-xs text-bronze/60 block mb-1">籍贯</label>
-                            <input className="w-full bg-[#f8f1e0] border-b border-bronze/40 p-2 outline-none text-ink" value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} />
-                          </div>
-                        </div>
-                        <div>
-                           <label className="flex items-center gap-2 text-ink font-bold py-2 cursor-pointer">
-                              <input type="checkbox" className="accent-vermilion w-4 h-4" checked={formData.isHighlight || false} onChange={e => setFormData({...formData, isHighlight: e.target.checked})} />
-                              <span className="flex items-center gap-1"><Crown size={14} className="text-vermilion"/> 设为显赫宗亲 (立传)</span>
-                           </label>
-                        </div>
-                        <div>
-                          <label className="text-xs text-bronze/60 block mb-1">生平概述</label>
-                          <textarea className="w-full bg-[#f8f1e0] border border-bronze/20 p-3 h-32 outline-none resize-none leading-relaxed text-ink" value={formData.biography || ''} onChange={e => setFormData({...formData, biography: e.target.value})} />
-                        </div>
-                        <div className="flex gap-4 pt-4">
-                          <button onClick={async () => {
-                            const updated = { ...selectedMember, ...formData } as FamilyMember;
-                            await saveMemberToDb(updated);
-                            setMembers(prev => prev.map(m => m.id === updated.id ? updated : m));
-                            setIsEditing(false);
-                          }} className="flex-1 bg-vermilion text-white py-2 rounded-full shadow hover:bg-vermilion/90">保存录入</button>
-                          <button onClick={() => setIsEditing(false)} className="flex-1 border border-bronze text-bronze py-2 rounded-full hover:bg-white/50">取消</button>
-                        </div>
-                      </div>
-                   </div>
-                 ) : (
-                   <div className="flex flex-col gap-8 pb-6">
-                      <div className="flex flex-col items-center text-center gap-3 pt-2 relative">
-                         <div className={`w-20 h-20 rounded-full flex items-center justify-center bg-[#fcf8ed] shadow-sm relative ${selectedMember.isHighlight ? 'border-2 border-[#daa520] shadow-[0_0_15px_rgba(218,165,32,0.4)]' : 'border border-bronze/30'}`}>
-                            {selectedMember.isHighlight && <div className="absolute -top-3 -right-2 text-[#daa520] animate-bounce"><Crown size={20} fill="currentColor"/></div>}
-                            <span className={`text-4xl font-bold font-serif ${selectedMember.isHighlight ? 'text-[#b8860b]' : 'text-ink'}`}>{selectedMember.name.slice(0,1)}</span>
-                         </div>
-                         <div>
-                            <h2 className="text-3xl font-bold text-ink mb-2 tracking-[0.2em] font-serif flex items-center justify-center gap-2">{selectedMember.name}</h2>
-                            <div className="flex justify-center gap-4 text-xs text-bronze uppercase tracking-widest opacity-80">
-                               <span>{selectedMember.gender === 'male' ? '乾 (男)' : '坤 (女)'}</span>
-                               <span>•</span>
-                               <span>{selectedMember.birthDate.split('-')[0]} 年生</span>
-                               {selectedMember.spouseName && <><span>•</span><span>配 {selectedMember.spouseName}</span></>}
-                            </div>
-                         </div>
-                      </div>
-                      <div className="flex items-center justify-center gap-2 opacity-30">
-                         <div className="h-[1px] w-12 bg-bronze"></div>
-                         <div className="w-1.5 h-1.5 rotate-45 border border-bronze bg-transparent"></div>
-                         <div className="h-[1px] w-12 bg-bronze"></div>
-                      </div>
-                      <div className="space-y-8 px-2">
-                         <div>
-                            <div className="flex justify-between items-end mb-2">
-                              <h3 className="text-base font-bold text-ink/80 font-serif">族志简传</h3>
-                              {isAdmin && (
-                                <button onClick={async () => {
-                                  setLoadingAi(true);
-                                  try {
-                                    const bio = await generateBiography(selectedMember, aiConfig);
-                                    const updated = { ...selectedMember, biography: bio };
-                                    await saveMemberToDb(updated);
-                                    setMembers(prev => prev.map(m => m.id === selectedMember.id ? updated : m));
-                                  } catch (e) {}
-                                  setLoadingAi(false);
-                                }} disabled={loadingAi} className="text-[10px] text-bronze hover:text-vermilion flex items-center gap-1 transition-colors"><Sparkles size={12}/> {loadingAi ? '撰写中...' : 'AI 续写'}</button>
-                              )}
-                            </div>
-                            <div className="text-sm leading-8 text-justify font-serif text-ink/80">
-                               <MarkdownRenderer content={selectedMember.biography || "暂无详细记载。"} />
-                            </div>
-                         </div>
-                         <div className="bg-[#f8f1e0] p-4 rounded-xl border border-bronze/10">
-                            <div className="flex justify-between items-center mb-3">
-                               <h4 className="text-xs font-bold text-bronze/70 uppercase">灵犀询问</h4>
-                               <div className="flex gap-2 text-[10px]">
-                                  <button onClick={() => setInquiryStyle('classical')} className={`transition ${inquiryStyle === 'classical' ? 'text-vermilion font-bold' : 'text-bronze/50'}`}>古风</button>
-                                  <span className="text-bronze/20">|</span>
-                                  <button onClick={() => setInquiryStyle('vernacular')} className={`transition ${inquiryStyle === 'vernacular' ? 'text-vermilion font-bold' : 'text-bronze/50'}`}>白话</button>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                               <input className="flex-1 bg-transparent border-b border-bronze/20 py-1 text-sm outline-none focus:border-bronze placeholder:text-bronze/30" placeholder={`欲知${selectedMember.name}何事...`} value={inquiry} onChange={e => setInquiry(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAiInquiry()} />
-                               <button onClick={handleAiInquiry} disabled={loadingAi} className="text-bronze hover:text-vermilion transition"><Send size={18}/></button>
-                            </div>
-                            {aiResponse && (
-                              <div className="mt-3 pt-3 border-t border-bronze/10 text-sm text-ink/80 leading-7">
-                                 <MarkdownRenderer content={aiResponse} />
-                              </div>
-                            )}
-                         </div>
-                         <div className="pt-2">
-                            <div className="flex justify-between items-center mb-3">
-                               <h3 className="text-base font-bold text-ink/80 font-serif">亲缘推演</h3>
-                               <div className="flex gap-2 text-[10px]">
-                                  <button onClick={() => setAnalysisStyle('traditional')} className={`transition ${analysisStyle === 'traditional' ? 'text-vermilion font-bold' : 'text-bronze/50'}`}>古风</button>
-                                  <span className="text-bronze/20">|</span>
-                                  <button onClick={() => setAnalysisStyle('modern')} className={`transition ${analysisStyle === 'modern' ? 'text-vermilion font-bold' : 'text-bronze/50'}`}>白话</button>
-                               </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <select className="flex-1 bg-[#f8f1e0] border-none text-sm outline-none rounded-lg p-2 text-ink/80 cursor-pointer hover:bg-[#efe6d0] transition" value={compareMemberId || ''} onChange={e => setCompareMemberId(e.target.value)}>
-                                 <option value="">选择对比宗亲...</option>
-                                 {activeMembers.filter(m => m.id !== selectedMember.id).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                              </select>
-                              <button 
-                                onClick={async () => {
-                                  const target = activeMembers.find(m => m.id === compareMemberId);
-                                  if (target) {
-                                    setLoadingDeduction(true);
-                                    setAiAnalysis("");
-                                    try { setAiAnalysis(await analyzeRelationship(selectedMember, target, activeMembers, analysisStyle, aiConfig)); } catch (e) {}
-                                    setLoadingDeduction(false);
-                                  }
-                                }}
-                                disabled={loadingDeduction || !compareMemberId}
-                                className="text-bronze hover:text-vermilion px-2 disabled:opacity-30"
-                              >
-                                 {loadingDeduction ? <Loader2 size={18} className="animate-spin"/> : '推演'}
-                              </button>
-                            </div>
-                            {aiAnalysis && (
-                              <div className="mt-3 p-3 bg-[#fffaf0] rounded-xl border border-bronze/5 text-sm leading-7 shadow-sm">
-                                 <MarkdownRenderer content={aiAnalysis} />
-                              </div>
-                            )}
-                         </div>
-                      </div>
-                      {isAdmin && (
-                         <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-bronze/10 opacity-80 hover:opacity-100 transition px-2">
-                            <button onClick={() => { setFormData(selectedMember); setIsEditing(true); }} className="text-bronze hover:text-vermilion text-xs flex flex-col items-center gap-1 group"><div className="p-2 bg-[#f8f1e0] rounded-full group-hover:bg-white transition"><Edit2 size={14}/></div>润色谱牒</button>
-                            <button onClick={() => handleDeleteNode(selectedMember.id)} className="text-bronze hover:text-vermilion text-xs flex flex-col items-center gap-1 group"><div className="p-2 bg-[#f8f1e0] rounded-full group-hover:bg-white transition"><Trash2 size={14}/></div>斩断此脉</button>
-                         </div>
-                      )}
-                   </div>
-                 )}
-              </div>
-           </div>
-           <div className="h-10 bg-gradient-to-t from-[#d4b483] to-[#f4ecd8] relative z-20 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] border-t border-[#c8aa7a]/30 flex items-center justify-center">
-              <div className="w-1/3 h-[2px] bg-[#a67c52]/20 rounded-full"></div>
-           </div>
-        </div>
-      </div>
-    );
   };
 
   return (
@@ -583,52 +194,6 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {activeMembers.length === 0 && !isLoading && (
-        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none">
-            <div className="glass-panel p-8 rounded-xl shadow-2xl flex flex-col items-center gap-4 pointer-events-auto animate-in fade-in zoom-in duration-500 border-2 border-bronze/30 max-w-sm w-full bg-[#fdf6e3]">
-                <div className="w-16 h-16 bg-vermilion text-white rounded-full flex items-center justify-center mb-2 shadow-lg border-2 border-white">
-                  <Scroll size={32} />
-                </div>
-                <h2 className="text-xl font-bold text-ink">开宗立派</h2>
-                <p className="text-xs text-bronze/80 mb-2 text-center max-w-[200px]">当前暂无族人记录。请确立始祖，并设置宗主密令。</p>
-                
-                <div className="w-full space-y-4 my-2">
-                   <div>
-                      <label className="text-[10px] font-bold text-bronze block mb-1">家族姓氏</label>
-                      <input 
-                        type="text" 
-                        value={setupSurname}
-                        onChange={(e) => setSetupSurname(e.target.value)}
-                        placeholder="如：袁"
-                        className="w-full bg-white border border-bronze/20 p-2 text-center font-bold text-lg outline-none focus:border-vermilion rounded-sm transition-colors text-ink placeholder:text-bronze/30"
-                        maxLength={2}
-                        onKeyDown={e => e.key === 'Enter' && handleCreateRoot()}
-                      />
-                   </div>
-                   <div>
-                      <label className="text-[10px] font-bold text-bronze block mb-1">设置宗主密令 (管理员密码)</label>
-                      <input 
-                        type="text" 
-                        value={setupPassphrase}
-                        onChange={(e) => setSetupPassphrase(e.target.value)}
-                        className="w-full bg-white border border-bronze/20 p-2 text-center outline-none focus:border-vermilion rounded-sm transition-colors text-ink font-serif"
-                        onKeyDown={e => e.key === 'Enter' && handleCreateRoot()}
-                      />
-                   </div>
-                </div>
-
-                <button 
-                  onClick={handleCreateRoot}
-                  disabled={isCreatingRoot || !setupSurname}
-                  className="w-full bg-vermilion text-white py-2.5 rounded-full font-bold shadow-lg hover:bg-vermilion/90 transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70 disabled:cursor-not-allowed mt-2"
-                >
-                  {isCreatingRoot ? <Loader2 size={16} className="animate-spin" /> : null} 
-                  {isCreatingRoot ? '正在立谱...' : `确立 ${setupSurname || '某'} 氏始祖`}
-                </button>
-            </div>
-        </div>
-      )}
-
       <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 pointer-events-auto">
          <div className="glass-panel px-4 py-2 rounded-full flex items-center gap-3 md:gap-6 border-2 border-bronze/30 shadow-2xl bg-white/95 scale-90 md:scale-100">
             <button onClick={() => {
@@ -646,8 +211,9 @@ const App: React.FC = () => {
                     reader.onload = async evt => {
                       try { 
                         const importedMembers = JSON.parse(evt.target?.result as string);
-                        setMembers(importedMembers);
-                        await Promise.all(importedMembers.map((m: FamilyMember) => saveMemberToDb(m)));
+                        // Batch save for robustness
+                        for (const m of importedMembers) { await saveMember(m); }
+                        refresh();
                         showToast("古籍载入成功", "info");
                       } catch { showToast("古籍破损，无法辨识。", "error"); }
                     };
@@ -674,7 +240,22 @@ const App: React.FC = () => {
          </div>
       </div>
 
-      {renderDetailsModal()}
+      <DetailsModal 
+        key={selectedMemberId || 'details-modal'} // Use a default key to prevent errors when null
+        member={selectedMember}
+        isOpen={isDetailsOpen}
+        onClose={() => {
+          setIsDetailsOpen(false);
+          setStartEditing(false); // Reset editing trigger on close
+        }}
+        allMembers={activeMembers}
+        isAdmin={isAdmin}
+        aiConfig={aiConfig}
+        onSave={saveMember}
+        onAddChild={handleAddChildNode}
+        onDelete={handleDeleteNode}
+        initialIsEditing={startEditing}
+      />
 
       {showLogin && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-300">
@@ -766,7 +347,7 @@ const App: React.FC = () => {
                            <div className="font-bold text-sm">{m.name}</div>
                            <div className="text-[10px] text-bronze">{m.birthDate} · {m.gender === 'male' ? '乾' : '坤'}</div>
                         </div>
-                        <button onClick={() => handleRestore(m.id)} className="bg-bronze text-white px-3 py-1 text-xs rounded hover:bg-vermilion transition-colors">恢复</button>
+                        <button onClick={() => restoreMemberNode(m.id)} className="bg-bronze text-white px-3 py-1 text-xs rounded hover:bg-vermilion transition-colors">恢复</button>
                      </div>
                    ))
                  )}
