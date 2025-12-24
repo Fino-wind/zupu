@@ -126,3 +126,106 @@ ${styleInstruction}
     return "笔墨断绝，无法回应。";
   }
 };
+
+/**
+ * 测试API连接是否正常
+ * @returns { success: boolean, message: string, error?: string }
+ */
+export const testConnection = async (settings?: AISettings): Promise<{ success: boolean; message: string; error?: string }> => {
+  const apiKey = settings?.apiKey || process.env.API_KEY;
+  const baseUrl = settings?.baseUrl;
+  const model = settings?.modelName || 'gemini-3-flash-preview';
+
+  // 验证必填项
+  if (!apiKey || apiKey.trim() === '') {
+    return { success: false, message: '请填写API密钥', error: 'API_KEY_EMPTY' };
+  }
+
+  if (!model || model.trim() === '') {
+    return { success: false, message: '请填写模型名称', error: 'MODEL_NAME_EMPTY' };
+  }
+
+  try {
+    if (baseUrl && baseUrl.trim() !== "") {
+      // 测试OpenAI兼容API
+      const cleanUrl = baseUrl.replace(/\/$/, '');
+
+      // 先尝试获取模型列表（如果API支持）
+      try {
+        const modelsResponse = await fetch(`${cleanUrl}/models`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`
+          }
+        });
+
+        if (modelsResponse.ok) {
+          const modelsData = await modelsResponse.json();
+          const modelExists = modelsData.data?.some((m: any) => m.id === model);
+
+          if (!modelExists) {
+            return {
+              success: false,
+              message: `模型 "${model}" 不存在`,
+              error: 'MODEL_NOT_FOUND',
+              availableModels: modelsData.data?.map((m: any) => m.id) || []
+            };
+          }
+        }
+      } catch (e) {
+        // 模型列表接口失败，继续测试实际调用
+        console.log("Models endpoint not available, testing with actual call...");
+      }
+
+      // 发送测试请求
+      const response = await fetch(`${cleanUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [{ role: 'user', content: '测试连接，请回复"连接成功"' }],
+          max_tokens: 10
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return {
+          success: false,
+          message: `API请求失败 (${response.status})`,
+          error: errorData.error?.message || response.statusText
+        };
+      }
+
+      const data = await response.json();
+      if (data.choices?.[0]?.message?.content) {
+        return { success: true, message: '连接成功！' };
+      } else {
+        return { success: false, message: 'API响应格式异常', error: 'INVALID_RESPONSE_FORMAT' };
+      }
+    } else {
+      // 测试Gemini SDK
+      const ai = new GoogleGenAI({ apiKey: apiKey as string });
+      const response = await ai.models.generateContent({
+        model: model,
+        contents: '测试连接',
+      });
+
+      if (response.text) {
+        return { success: true, message: '连接成功！' };
+      } else {
+        return { success: false, message: 'Gemini响应异常', error: 'GEMINI_RESPONSE_ERROR' };
+      }
+    }
+  } catch (error: any) {
+    console.error("Connection test error:", error);
+    return {
+      success: false,
+      message: '网络连接失败',
+      error: error.message || 'NETWORK_ERROR'
+    };
+  }
+};

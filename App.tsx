@@ -10,7 +10,7 @@ import {
   Settings, MapPin, BookOpen, User, Crown, ArrowUpCircle,
   Fingerprint, Bell, Scroll, UserPlus
 } from 'lucide-react';
-import { AISettings } from './services/geminiService';
+import { AISettings, testConnection } from './services/geminiService';
 
 const App: React.FC = () => {
   // Use Custom Hook for Data Logic
@@ -51,6 +51,10 @@ const App: React.FC = () => {
     isOpen: false, memberId: null, memberName: ''
   });
 
+  // API测试状态
+  const [testingConnection, setTestingConnection] = useState(false);
+  const [testResult, setTestResult] = useState<{success: boolean; message: string} | null>(null);
+
   const selectedMember = useMemo(() => members.find(m => m.id === selectedMemberId) || null, [members, selectedMemberId]);
 
   const generateId = () => `M-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
@@ -87,6 +91,27 @@ const App: React.FC = () => {
       setPassphraseInput("");
     } else {
       showToast("印鉴不符", "error");
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setTestingConnection(true);
+    setTestResult(null);
+
+    try {
+      const result = await testConnection(aiConfig);
+      setTestResult(result);
+
+      if (result.success) {
+        showToast("连接测试成功！", "info");
+      } else {
+        showToast("连接测试失败：" + result.message, "error");
+      }
+    } catch (error) {
+      setTestResult({ success: false, message: "测试连接时出错" });
+      showToast("连接测试失败", "error");
+    } finally {
+      setTestingConnection(false);
     }
   };
 
@@ -321,6 +346,40 @@ const App: React.FC = () => {
                         <Key size={14} className="text-bronze/40 mr-2" />
                         <input type="password" className="flex-1 p-2 text-xs outline-none bg-transparent" placeholder="输入您的 API Key" value={aiConfig.apiKey} onChange={e => setAiConfig({...aiConfig, apiKey: e.target.value})} />
                      </div>
+                   </div>
+                   {/* 测试连接按钮和结果 */}
+                   <div className="pt-2 border-t border-bronze/10">
+                     <button
+                       onClick={handleTestConnection}
+                       disabled={testingConnection || !aiConfig.apiKey}
+                       className="w-full flex items-center justify-center gap-2 py-2 rounded-sm text-xs font-bold border-2 transition ${
+                         testingConnection
+                           ? 'border-bronze/30 text-bronze/50 cursor-not-allowed'
+                           : 'border-bronze text-bronze hover:bg-bronze hover:text-white'
+                       }"
+                     >
+                       {testingConnection ? (
+                         <>
+                           <Loader2 size={14} className="animate-spin" />
+                           <span>测试中...</span>
+                         </>
+                       ) : (
+                         <>
+                           <Sparkles size={14} />
+                           <span>测试API连接</span>
+                         </>
+                       )}
+                     </button>
+                     {testResult && (
+                       <div className={`mt-2 p-2 rounded text-[10px] text-center ${
+                         testResult.success
+                           ? 'bg-green-50 border border-green-200 text-green-700'
+                           : 'bg-red-50 border border-red-200 text-red-700'
+                       }`}>
+                         {testResult.success ? '✓ ' : '✗ '}
+                         {testResult.message}
+                       </div>
+                     )}
                    </div>
                 </div>
               </div>
