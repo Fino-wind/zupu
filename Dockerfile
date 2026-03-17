@@ -34,6 +34,7 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 # 对外端口
 EXPOSE 8888
 ENV NODE_ENV=production
+ENV DB_PATH=/app/data/genealogy.db
 
 # 关键：一个 CMD 同时启动后端和 nginx
 # - node server.js 在后台

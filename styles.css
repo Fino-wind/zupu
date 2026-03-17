@@ -1,0 +1,253 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: #e5d5b7;
+    color: #2c2c2c;
+    font-family: 'Noto Serif SC', serif;
+    overflow: hidden;
+    margin: 0;
+  }
+
+  button,
+  [role='button'] {
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .bg-parchment-texture {
+    background-color: #f4ecd8;
+    background-image: url('https://www.transparenttextures.com/patterns/paper-fibers.png');
+    box-shadow: inset 0 0 100px rgba(0, 0, 0, 0.1);
+  }
+
+  .bg-clouds {
+    background-image: url('https://www.transparenttextures.com/patterns/stardust.png');
+    opacity: 0.3;
+  }
+
+  .scroll-container {
+    border-left: 10px solid #5c4033;
+    border-right: 10px solid #5c4033;
+    position: relative;
+  }
+
+  .scroll-container::before,
+  .scroll-container::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    background: linear-gradient(to right, #3d2b22, #5c4033, #3d2b22);
+    z-index: 30;
+  }
+
+  .scroll-container::before {
+    left: -10px;
+  }
+
+  .scroll-container::after {
+    right: -10px;
+  }
+
+  .scroll-node {
+    background: #fdf6e3;
+    border: 1px solid #a67c52;
+    box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.15);
+    position: relative;
+  }
+
+  .glass-panel {
+    background: rgba(253, 246, 227, 0.9);
+    backdrop-filter: blur(10px);
+    border: 1px solid #a67c52;
+  }
+
+  .field-shell {
+    @apply w-full bg-white/80 border border-bronze/20 px-3 py-2 rounded-sm outline-none transition-colors text-ink placeholder:text-bronze/35 focus:border-vermilion;
+  }
+
+  .toolbar-chip {
+    @apply rounded-full border border-bronze/20 bg-white/70 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.25em] text-bronze shadow-sm;
+  }
+
+  .btn-icon {
+    @apply p-2 text-bronze transition hover:text-vermilion;
+  }
+
+  .btn-primary {
+    @apply bg-vermilion text-white shadow-md transition-colors hover:bg-vermilion/90 disabled:opacity-70 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply border border-bronze text-bronze transition-colors hover:bg-white/60;
+  }
+
+  .genealogy-canvas {
+    touch-action: none;
+  }
+}
+
+@layer utilities {
+  .writing-v {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+
+  .ink-path {
+    filter: url(#ink-bleed);
+    stroke-linecap: round;
+    transition: all 0.5s ease;
+  }
+
+  .watermark-text {
+    font-family: 'Ma Shan Zheng', cursive;
+    filter: blur(1px);
+    user-select: none;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(166, 124, 82, 0.7) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(166, 124, 82, 0.7);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .animate-in {
+    animation-duration: 0.35s;
+    animation-fill-mode: both;
+    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .fade-in {
+    animation-name: fade-in;
+  }
+
+  .zoom-in {
+    animation-name: zoom-in;
+  }
+
+  .zoom-in-95 {
+    animation-name: zoom-in-95;
+  }
+
+  .slide-in-from-top-4 {
+    animation-name: slide-in-from-top-4;
+  }
+
+  .animate-in.duration-300 {
+    animation-duration: 300ms;
+  }
+
+  .animate-in.duration-500 {
+    animation-duration: 500ms;
+  }
+
+  .animate-in.delay-100 {
+    animation-delay: 100ms;
+  }
+
+  .animate-float {
+    animation: float 5s ease-in-out infinite;
+  }
+}
+
+@media (min-width: 768px) {
+  .scroll-container {
+    border-left-width: 25px;
+    border-right-width: 25px;
+  }
+
+  .scroll-container::before,
+  .scroll-container::after {
+    width: 15px;
+  }
+
+  .scroll-container::before {
+    left: -25px;
+  }
+
+  .scroll-container::after {
+    right: -25px;
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes zoom-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes zoom-in-95 {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes slide-in-from-top-4 {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -1rem, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}

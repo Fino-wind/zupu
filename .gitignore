@@ -31,3 +31,4 @@ dist-ssr
 # Database
 *.db
 genealogy.db
+data/

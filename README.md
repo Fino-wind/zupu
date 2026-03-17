@@ -4,26 +4,26 @@
 
 ## ✨ 主要功能
 
-*   **交互式族谱图**：基于 D3.js 的力导向图，支持拖拽、缩放，以古风卷轴形式呈现。
-*   **宗法关系推演**：利用 AI 智能分析任意两名家族成员之间的复杂亲戚称谓（如“堂叔”、“从堂妹”）。
-*   **AI 传记撰写**：自动根据成员信息生成仿古文或白话文的生平志传。
-*   **灵犀一问**：支持以自然语言向 AI 询问家族成员的历史背景。
-*   **宗主管理模式**：
-    *   支持增删改查家族成员。
-    *   提供“宗祠秘档”（回收站）功能。
-    *   支持 JSON 格式的族谱数据导入与导出。
-*   **双重存储保障**：
-    *   **云端/本地数据库**：使用 SQLite 存储核心数据。
-    *   **离线容灾**：网络异常时自动切换至浏览器本地存储 (localStorage)，并在网络恢复后尝试同步，防止数据丢失。
+- **交互式族谱图**：基于 D3.js 的力导向图，支持拖拽、缩放，以古风卷轴形式呈现。
+- **宗法关系推演**：利用 AI 智能分析任意两名家族成员之间的复杂亲戚称谓（如“堂叔”、“从堂妹”）。
+- **AI 传记撰写**：自动根据成员信息生成仿古文或白话文的生平志传。
+- **灵犀一问**：支持以自然语言向 AI 询问家族成员的历史背景。
+- **宗主管理模式**：
+  - 支持增删改查家族成员。
+  - 提供“宗祠秘档”（回收站）功能。
+  - 支持 JSON 格式的族谱数据导入与导出。
+- **双重存储保障**：
+  - **云端/本地数据库**：使用 SQLite 存储核心数据。
+  - **离线容灾**：网络异常时自动切换至浏览器本地存储 (localStorage)，并在网络恢复后尝试同步，防止数据丢失。
 
 ## 🛠️ 技术栈
 
-*   **前端框架**: React 19, TypeScript
-*   **可视化**: D3.js
-*   **样式**: TailwindCSS
-*   **AI 支持**: Google Gemini API (@google/genai)
-*   **后端**: Node.js (Express) + SQLite
-*   **构建工具**: Vite
+- **前端框架**: React 19, TypeScript
+- **可视化**: D3.js
+- **样式**: TailwindCSS
+- **AI 支持**: Google Gemini API (@google/genai)
+- **后端**: Node.js (Express) + SQLite
+- **构建工具**: Vite
 
 ## 🚀 快速开始
 
@@ -117,9 +117,10 @@ docker build -t chrono-genealogy .
 
 运行容器时，我们需要特别注意 **数据持久化**。如果不挂载卷 (Volume)，重启容器后您的族谱数据将会丢失！
 
-请确保当前目录下有一个 `genealogy.db` 文件。如果是首次运行，可以先创建一个空文件：
+请确保当前目录下有一个 `data` 目录（用于持久化数据库）。如果是首次运行，可以先创建：
+
 ```bash
-touch genealogy.db
+mkdir -p data
 ```
 
 然后运行容器：
@@ -129,17 +130,31 @@ touch genealogy.db
 
 docker run -d \
   --name my-genealogy \
-  -p 8888:80 \
+  -p 8888:8888 \
   -e API_KEY="your_api_key_here" \
-  -v $(pwd)/genealogy.db:/app/genealogy.db \
+  -e DB_PATH="/app/data/genealogy.db" \
+  -v $(pwd)/data:/app/data \
   chrono-genealogy
 ```
 
 **参数详解：**
-*   `-d`: 后台运行。
-*   `-p 8888:80`: 将容器的 80 端口映射到宿主机的 8888 端口。您可以通过 `http://localhost:8888` 访问。
-*   `-e API_KEY="..."`: 注入 AI 功能所需的密钥。
-*   `-v $(pwd)/genealogy.db:/app/genealogy.db`: **核心配置**。将宿主机的 `genealogy.db` 文件映射到容器内部。这样，无论您如何更新或重启容器，数据都会保存在您宿主机的这个文件中。
+
+- `-d`: 后台运行。
+- `-p 8888:8888`: 将容器的 8888 端口映射到宿主机的 8888 端口。您可以通过 `http://localhost:8888` 访问。
+- `-e API_KEY="..."`: 注入 AI 功能所需的密钥。
+- `-e DB_PATH=...`: 指定数据库文件路径（容器内）。
+- `-v $(pwd)/data:/app/data`: **核心配置**。将宿主机的 `data` 目录映射到容器内部。这样，无论您如何更新或重启容器，数据都会保存在宿主机该目录中。
+
+### 使用 Docker Compose（推荐）
+
+项目已提供 `docker-compose.yml`，可一键启动：
+
+```bash
+# 写入 API_KEY 后启动
+API_KEY=your_api_key_here docker compose up -d --build
+```
+
+数据将保存到本地 `./data` 目录。
 
 ### 第四步：验证与访问
 

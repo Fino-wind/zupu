@@ -15,7 +15,7 @@ describe('Backend API', () => {
   // Clear members table before each test to ensure isolation
   beforeEach(async () => {
     await new Promise<void>((resolve, reject) => {
-      db.run("DELETE FROM members", (err: Error | null) => {
+      db.run('DELETE FROM members', (err: Error | null) => {
         if (err) reject(err);
         else resolve();
       });
@@ -23,7 +23,7 @@ describe('Backend API', () => {
   });
 
   afterAll(async () => {
-    await new Promise<void>(resolve => db.close(() => resolve()));
+    await new Promise<void>((resolve) => db.close(() => resolve()));
   });
 
   it('GET /api/members should return empty array initially', async () => {
@@ -42,7 +42,7 @@ describe('Backend API', () => {
       address: 'Test Address',
       gender: 'male',
       parentId: null,
-      isDeleted: false
+      isDeleted: false,
     };
 
     const res = await request(app).post('/api/members').send(member);
@@ -57,7 +57,16 @@ describe('Backend API', () => {
 
   it('DELETE /api/members/:id should remove member', async () => {
     // Insert first
-    const member = { id: 'del-1', name: 'To Delete', gender: 'female', birthDate: '1990-01-01', isDeleted: false, address: '', isMarried: false, parentId: null };
+    const member = {
+      id: 'del-1',
+      name: 'To Delete',
+      gender: 'female',
+      birthDate: '1990-01-01',
+      isDeleted: false,
+      address: '',
+      isMarried: false,
+      parentId: null,
+    };
     await request(app).post('/api/members').send(member);
 
     const delRes = await request(app).delete('/api/members/del-1');
@@ -66,16 +75,35 @@ describe('Backend API', () => {
     const getRes = await request(app).get('/api/members');
     expect(getRes.body.length).toBe(0);
   });
-  
+
   it('POST /api/members should update existing member (Upsert)', async () => {
-     const member = { id: 'up-1', name: 'Original', gender: 'male', birthDate: '1990-01-01', isDeleted: false, address: '', isMarried: false, parentId: null };
-     await request(app).post('/api/members').send(member);
-     
-     const updated = { ...member, name: 'Updated Name' };
-     await request(app).post('/api/members').send(updated);
-     
-     const getRes = await request(app).get('/api/members');
-     expect(getRes.body.length).toBe(1);
-     expect(getRes.body[0].name).toBe('Updated Name');
+    const member = {
+      id: 'up-1',
+      name: 'Original',
+      gender: 'male',
+      birthDate: '1990-01-01',
+      isDeleted: false,
+      address: '',
+      isMarried: false,
+      parentId: null,
+    };
+    await request(app).post('/api/members').send(member);
+
+    const updated = { ...member, name: 'Updated Name' };
+    await request(app).post('/api/members').send(updated);
+
+    const getRes = await request(app).get('/api/members');
+    expect(getRes.body.length).toBe(1);
+    expect(getRes.body[0].name).toBe('Updated Name');
+  });
+
+  it('POST /api/members should reject invalid payloads', async () => {
+    const res = await request(app).post('/api/members').send({ id: '', name: '' });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/ai/generate should validate prompt before processing', async () => {
+    const res = await request(app).post('/api/ai/generate').send({ prompt: '' });
+    expect(res.status).toBe(400);
   });
 });

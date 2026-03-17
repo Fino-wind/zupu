@@ -1,0 +1,11 @@
+services:
+  chrono-genealogy:
+    build: .
+    ports:
+      - '8888:8888'
+    environment:
+      - API_KEY=${API_KEY}
+      - DB_PATH=/app/data/genealogy.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
