@@ -10,7 +10,49 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const AI_TIMEOUT_MS = 15000;
+const MAX_PROMPT_LENGTH = 8000;
 const VALID_GENDERS = new Set(['male', 'female', 'other']);
+
+// 本地开发默认放行的来源（Vite 5021 / 预览 4173 / 容器内 nginx 8888）
+const DEFAULT_DEV_ORIGINS = [
+  'http://localhost:5021',
+  'http://127.0.0.1:5021',
+  'http://localhost:4173',
+  'http://127.0.0.1:4173',
+  'http://localhost:8888',
+  'http://127.0.0.1:8888',
+];
+
+/**
+ * 自定义 AI 端点白名单。
+ * 不设白名单时一律拒绝自定义 baseUrl —— 因为服务端会带着自己的 API_KEY 去请求它，
+ * 任何人传一个自己控制的地址就能把密钥拿走（SSRF + 凭据外泄）。
+ * 需要用第三方兼容端点时，在 .env 里写：
+ *   AI_ALLOWED_BASE_URLS=https://openrouter.ai/api/v1,https://api.deepseek.com/v1
+ */
+function isAllowedBaseUrl(baseUrl) {
+  const allowed = (process.env.AI_ALLOWED_BASE_URLS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (allowed.length === 0) return false;
+
+  let target;
+  try {
+    target = new URL(baseUrl);
+  } catch {
+    return false;
+  }
+  if (target.protocol !== 'https:' && target.protocol !== 'http:') return false;
+
+  return allowed.some((entry) => {
+    try {
+      return new URL(entry).origin === target.origin;
+    } catch {
+      return false;
+    }
+  });
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -26,7 +68,26 @@ if (DB_PATH !== ':memory:') {
   }
 }
 
-app.use(cors());
+// CORS 白名单。默认只放行同源与本地开发端口；
+// 原先是无参数 cors()，等于 Access-Control-Allow-Origin: *，
+// 任何网页的脚本都能读写本机族谱（配合无鉴权，风险不只是"被看到"）。
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      // 无 Origin 头 = 同源请求 / curl / 服务端调用，放行
+      if (!origin) return callback(null, true);
+      if (DEFAULT_DEV_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('Origin not allowed'));
+    },
+  })
+);
 app.use(express.json({ limit: '512kb' }));
 
 // 初始化数据库
@@ -111,12 +172,23 @@ function getErrorMessage(error) {
 
 function validateAiRequestBody(body) {
   if (!body || typeof body !== 'object') {
-    return { error: 'Invalid AI request payload' };
+    return { error: 'AI 请求格式不正确' };
   }
 
   const prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
   if (!prompt) {
-    return { error: 'Prompt is required' };
+    return { error: '请求缺少 prompt 内容' };
+  }
+  if (prompt.length > MAX_PROMPT_LENGTH) {
+    return { error: `请求内容过长（上限 ${MAX_PROMPT_LENGTH} 字）` };
+  }
+
+  const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : '';
+  if (baseUrl && !isAllowedBaseUrl(baseUrl)) {
+    return {
+      error:
+        '该 AI 端点不在允许列表中。如需使用自定义端点，请在服务端 .env 的 AI_ALLOWED_BASE_URLS 中登记。',
+    };
   }
 
   return {
@@ -125,13 +197,13 @@ function validateAiRequestBody(body) {
       typeof body.modelName === 'string' && body.modelName.trim()
         ? body.modelName.trim()
         : 'gemini-3-flash-preview',
-    baseUrl: typeof body.baseUrl === 'string' ? body.baseUrl.trim() : '',
+    baseUrl,
   };
 }
 
 function validateMemberPayload(payload) {
   if (!payload || typeof payload !== 'object') {
-    return { error: 'Invalid member payload' };
+    return { error: '成员数据格式不正确' };
   }
 
   const rawMember = normalizeMemberForStorage(payload);
@@ -140,15 +212,15 @@ function validateMemberPayload(payload) {
   const gender = typeof rawMember.gender === 'string' ? rawMember.gender : 'other';
 
   if (!id) {
-    return { error: 'Missing member ID' };
+    return { error: '缺少成员 ID' };
   }
 
   if (!name) {
-    return { error: 'Missing member name' };
+    return { error: '缺少成员姓名' };
   }
 
   if (!VALID_GENDERS.has(gender)) {
-    return { error: 'Invalid gender value' };
+    return { error: '性别取值不合法' };
   }
 
   return {
@@ -307,7 +379,7 @@ app.post('/api/ai/generate', async (req, res) => {
   const apiKey = process.env.API_KEY;
 
   if (!apiKey) {
-    res.status(500).json({ error: 'Server missing API_KEY configuration' });
+    res.status(500).json({ error: '服务端未配置 API_KEY。请在项目根目录创建 .env 并填入 API_KEY=你的密钥（可参考 .env.example），然后重启服务。' });
     return;
   }
 
@@ -351,7 +423,7 @@ app.post('/api/ai/generate', async (req, res) => {
     }
   } catch (error) {
     console.error('AI Generation Error:', error);
-    res.status(500).json({ error: getErrorMessage(error) || 'AI generation failed' });
+    res.status(500).json({ error: getErrorMessage(error) || 'AI 生成失败' });
   }
 });
 
@@ -393,19 +465,48 @@ app.post('/api/members', (req, res) => {
   });
 });
 
-// 删除成员
+// 移入宗祠秘档（软删除）
+//
+// 这里过去执行的是 DELETE FROM members —— 物理删除、不可恢复。
+// 而前端从来不调用它：UI 上的"删除"走的是 POST upsert + isDeleted=true，
+// 也就是"宗祠秘档"回收站。换句话说，界面精心保护了数据，
+// 后端却敞着一个能绕过回收站、把人永久抹掉的接口，且没有任何鉴权。
+// 族谱是不可再生的记录，这里改为与前端一致的软删除：进回收站，可还原。
 app.delete('/api/members/:id', (req, res) => {
   const id = typeof req.params.id === 'string' ? req.params.id.trim() : '';
   if (!id) {
-    res.status(400).json({ error: 'Missing member ID' });
+    res.status(400).json({ error: '缺少成员 ID' });
     return;
   }
-  db.run('DELETE FROM members WHERE id = ?', [id], function (err) {
+
+  db.get('SELECT json_content FROM members WHERE id = ?', [id], (err, row) => {
     if (err) {
       res.status(500).json({ error: err.message });
       return;
     }
-    res.json({ message: 'Deleted', changes: this.changes });
+    if (!row) {
+      res.status(404).json({ error: '未找到该成员' });
+      return;
+    }
+
+    const member = safeParseMember(row.json_content);
+    if (!member) {
+      res.status(500).json({ error: '成员数据已损坏，无法处理' });
+      return;
+    }
+
+    const archived = { ...member, isDeleted: true };
+    db.run(
+      'UPDATE members SET json_content = ?, is_deleted = 1 WHERE id = ?',
+      [JSON.stringify(archived), id],
+      function (updateErr) {
+        if (updateErr) {
+          res.status(500).json({ error: updateErr.message });
+          return;
+        }
+        res.json({ message: 'Archived', id, changes: this.changes });
+      }
+    );
   });
 });
 

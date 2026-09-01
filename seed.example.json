@@ -1,0 +1,93 @@
+[
+  {
+    "id": "demo-1",
+    "name": "示例·始祖",
+    "birthDate": "1918-03-12",
+    "isMarried": true,
+    "address": "示例省示例府清河里",
+    "gender": "male",
+    "parentId": null,
+    "spouseId": "demo-1-spouse",
+    "biography": "这是一条示例传记。真实使用时，此处可以写口述记录、生平、迁徙经过——族谱最珍贵的部分往往不是名字和日期，而是这些只有长辈记得的细节。",
+    "isDeleted": false,
+    "isHighlight": true
+  },
+  {
+    "id": "demo-1-spouse",
+    "name": "示例·始祖之妻",
+    "birthDate": "1921-08-04",
+    "isMarried": true,
+    "address": "示例省示例府清河里",
+    "gender": "female",
+    "parentId": null,
+    "spouseId": "demo-1",
+    "biography": "配偶通过 spouseId 双向关联，两人互相指向对方的 id。",
+    "isDeleted": false,
+    "isHighlight": false
+  },
+  {
+    "id": "demo-2",
+    "name": "示例·长子",
+    "birthDate": "1946-11-02",
+    "isMarried": true,
+    "address": "示例省示例市",
+    "gender": "male",
+    "parentId": "demo-1",
+    "spouseId": "demo-2-spouse",
+    "biography": "子女通过 parentId 指向父/母的 id，族谱图据此生成层级。",
+    "isDeleted": false,
+    "isHighlight": false
+  },
+  {
+    "id": "demo-2-spouse",
+    "name": "示例·长媳",
+    "birthDate": "1949-05-19",
+    "isMarried": true,
+    "address": "示例省示例市",
+    "gender": "female",
+    "parentId": null,
+    "spouseId": "demo-2",
+    "biography": "",
+    "isDeleted": false,
+    "isHighlight": false
+  },
+  {
+    "id": "demo-3",
+    "name": "示例·次子",
+    "birthDate": "1950-01-27",
+    "isMarried": false,
+    "address": "",
+    "gender": "male",
+    "parentId": "demo-1",
+    "spouseId": null,
+    "biography": "未婚成员：isMarried 为 false，spouseId 为 null。",
+    "isDeleted": false,
+    "isHighlight": false
+  },
+  {
+    "id": "demo-4",
+    "name": "示例·长孙",
+    "birthDate": "1975-09-08",
+    "isMarried": false,
+    "address": "示例省示例市",
+    "gender": "male",
+    "parentId": "demo-2",
+    "spouseId": null,
+    "biography": "第三代。层级由 parentId 链条自动推导，不需要手工填写辈分。",
+    "isDeleted": false,
+    "isHighlight": false
+  },
+  {
+    "id": "demo-5",
+    "name": "示例·已归档者",
+    "birthDate": "1978-02-14",
+    "isMarried": false,
+    "address": "",
+    "gender": "female",
+    "parentId": "demo-2",
+    "spouseId": null,
+    "biography": "isDeleted 为 true 的成员不显示在族谱图上，但保留在「宗祠秘档」中，可随时还原。删除在本系统里永远只是归档，不是抹除。",
+    "isDeleted": true,
+    "isHighlight": false
+  }
+]

@@ -55,7 +55,7 @@ describe('Backend API', () => {
     expect(getRes.body[0].name).toBe('Test Member');
   });
 
-  it('DELETE /api/members/:id should remove member', async () => {
+  it('DELETE /api/members/:id 应移入回收站而非物理删除', async () => {
     // Insert first
     const member = {
       id: 'del-1',
@@ -72,8 +72,31 @@ describe('Backend API', () => {
     const delRes = await request(app).delete('/api/members/del-1');
     expect(delRes.status).toBe(200);
 
+    // 记录必须还在（族谱数据不可再生，删除只应是"移入宗祠秘档"）
     const getRes = await request(app).get('/api/members');
-    expect(getRes.body.length).toBe(0);
+    expect(getRes.body.length).toBe(1);
+    expect(getRes.body[0].id).toBe('del-1');
+    expect(getRes.body[0].isDeleted).toBe(true);
+  });
+
+  it('DELETE 不存在的成员应返回 404', async () => {
+    const res = await request(app).delete('/api/members/does-not-exist');
+    expect(res.status).toBe(404);
+  });
+
+  it('自定义 AI baseUrl 不在白名单时必须被拒绝（防止服务端密钥被转发给任意地址）', async () => {
+    const res = await request(app)
+      .post('/api/ai/generate')
+      .send({ prompt: 'hi', baseUrl: 'http://attacker.example.com' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('允许列表');
+  });
+
+  it('超长 prompt 应被拒绝', async () => {
+    const res = await request(app)
+      .post('/api/ai/generate')
+      .send({ prompt: 'x'.repeat(9000) });
+    expect(res.status).toBe(400);
   });
 
   it('POST /api/members should update existing member (Upsert)', async () => {

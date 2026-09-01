@@ -11,8 +11,7 @@
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "test:api": "vitest run --config vitest.config.api.ts",
-    "test:e2e": "playwright test"
+    "test:api": "vitest run --config vitest.config.api.ts"
   },
   "dependencies": {
     "@google/genai": "^1.34.0",
@@ -27,13 +26,12 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "@playwright/test": "^1.42.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/d3": "^7.4.3",
     "@types/node": "^20.11.24",
-    "@types/react": "^18.2.61",
-    "@types/react-dom": "^18.2.19",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
     "@types/supertest": "^6.0.2",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
@@ -51,5 +49,6 @@
     "typescript": "^5.3.3",
     "vite": "^5.1.4",
     "vitest": "^1.3.1"
-  }
+  },
+  "license": "MIT"
 }
