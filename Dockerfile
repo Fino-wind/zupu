@@ -1,5 +1,11 @@
+# npm 源可选。中国大陆构建时可传 --build-arg NPM_REGISTRY=https://registry.npmmirror.com
+# 默认走官方源，避免把某一地区的镜像地址固化进镜像。
+ARG NPM_REGISTRY=https://registry.npmjs.org
+
 # --- 构建前端 ---
 FROM node:20-alpine AS builder
+ARG NPM_REGISTRY
+ENV NPM_CONFIG_REGISTRY=$NPM_REGISTRY
 WORKDIR /app
 
 # 不使用 lock 文件，直接安装
@@ -12,6 +18,8 @@ RUN npm run build
 
 # --- 运行阶段：Node + Nginx 同容器 ---
 FROM node:20-alpine
+ARG NPM_REGISTRY
+ENV NPM_CONFIG_REGISTRY=$NPM_REGISTRY
 WORKDIR /app
 
 # 安装 nginx

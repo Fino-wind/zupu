@@ -1,8 +1,13 @@
 services:
   chrono-genealogy:
-    build: .
+    build:
+      context: .
+      args:
+        # 中国大陆可在 .env 里设 NPM_REGISTRY=https://registry.npmmirror.com
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmjs.org}
+    # 宿主端口冲突时，在 .env 里设 HOST_PORT，无需改本文件
     ports:
-      - '8888:8888'
+      - '${HOST_PORT:-8888}:8888'
     environment:
       - API_KEY=${API_KEY}
       - DB_PATH=/app/data/genealogy.db

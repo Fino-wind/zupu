@@ -157,6 +157,18 @@ docker run -d \
 - `-e DB_PATH=...`: 指定数据库文件路径（容器内）。
 - `-v $(pwd)/data:/app/data`: **核心配置**。将宿主机的 `data` 目录映射到容器内部。这样，无论您如何更新或重启容器，数据都会保存在宿主机该目录中。
 
+### 本机差异走 `.env`，不要改仓库文件
+
+端口被占用、或需要国内 npm 源时，在项目根目录的 `.env` 里写：
+
+```bash
+HOST_PORT=8889                                  # 换宿主机端口
+NPM_REGISTRY=https://registry.npmmirror.com     # 构建时用国内源（大陆网络快很多）
+```
+
+`docker-compose.yml` 与 `Dockerfile` 都从这里取值并带有默认值，
+所以**同一份仓库代码可以直接跑在不同机器上**，本机特有的配置不会污染 git 历史。
+
 ### 使用 Docker Compose（推荐）
 
 项目已提供 `docker-compose.yml`，可一键启动：
