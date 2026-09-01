@@ -29,7 +29,7 @@ RUN mkdir -p /app/data
 
 # 前端构建产物 + nginx 配置
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx.conf /etc/nginx/http.d/default.conf
 
 # 对外端口
 EXPOSE 8888
