@@ -5,7 +5,10 @@ interface FamilyOverviewPanelProps {
   deletedCount: number;
   highlightCount: number;
   locale: 'zh' | 'en';
+  /** 搜索结果，仅用于下方的候选列表；数量受关键词与上限影响，不代表族谱规模 */
   members: FamilyMember[];
+  /** 在谱成员总数。必须独立于 members——后者是搜索结果，没搜索时为空 */
+  totalCount: number;
   onQueryChange: (value: string) => void;
   onSelectMember: (member: FamilyMember) => void;
   query: string;
@@ -18,6 +21,7 @@ const FamilyOverviewPanel = ({
   highlightCount,
   locale,
   members,
+  totalCount,
   onQueryChange,
   onSelectMember,
   query,
@@ -45,7 +49,7 @@ const FamilyOverviewPanel = ({
           <div className='flex items-center gap-2 text-bronze'>
             <Users size={12} /> {t('在谱宗亲', 'Members')}
           </div>
-          <div className='mt-2 text-xl font-bold text-ink'>{members.length}</div>
+          <div className='mt-2 text-xl font-bold text-ink'>{totalCount}</div>
         </div>
         <div className='rounded-2xl border border-bronze/10 bg-white/50 px-3 py-2'>
           <div className='flex items-center gap-2 text-bronze'>

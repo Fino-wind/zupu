@@ -1076,6 +1076,7 @@ const App: React.FC = () => {
             onSelectMember={handleOverviewSelect}
             query={memberSearchQuery}
             rootCount={rootCount}
+            totalCount={activeMembers.length}
             t={t}
           />
         </div>
