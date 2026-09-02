@@ -21,7 +21,7 @@
 - **前端框架**: React 19, TypeScript
 - **可视化**: D3.js
 - **样式**: TailwindCSS
-- **AI 支持**: Google Gemini API (@google/genai)
+- **AI 支持**: Vercel AI SDK（`ai` + `@ai-sdk/google` + `@ai-sdk/openai-compatible`）
 - **后端**: Node.js (Express) + SQLite
 - **构建工具**: Vite
 
@@ -29,7 +29,10 @@
 
 ### 前置要求
 
-AI 相关功能（宗法关系推演 / AI 传记撰写 / 灵犀一问）依赖 Google Gemini API。
+AI 相关功能（宗法关系推演 / AI 传记撰写 / 灵犀一问）需要一个大模型服务。
+本项目通过 [Vercel AI SDK](https://github.com/vercel/ai) 接入，**换供应商是改配置、不是改代码**：
+默认直连 Google Gemini，也可以指向任何 OpenAI 兼容端点——自建网关（new-api / one-api）、
+本地模型（llama.cpp / Ollama）、OpenRouter、DeepSeek、Mistral 等都可以。
 **没有密钥时，族谱的增删改查、可视化、导入导出全部可用，仅 AI 功能不可用。**
 
 密钥通过项目根目录的 `.env` 文件提供：

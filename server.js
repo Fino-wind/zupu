@@ -4,7 +4,9 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
-import { GoogleGenAI } from '@google/genai';
+import { generateText } from 'ai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -35,6 +37,9 @@ function isAllowedBaseUrl(baseUrl) {
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
+  // 服务端自己配的默认端点天然可信（来自 .env，不是请求方能控制的输入）
+  const configuredDefault = (process.env.AI_DEFAULT_BASE_URL || '').trim();
+  if (configuredDefault) allowed.push(configuredDefault);
   if (allowed.length === 0) return false;
 
   let target;
@@ -52,6 +57,35 @@ function isAllowedBaseUrl(baseUrl) {
       return false;
     }
   });
+}
+
+/**
+ * 把「用哪家 AI」收敛成一处。
+ *
+ * 换供应商 = 换这张表里的一行，业务代码只认 generateText。
+ * 之所以只列两条就够：@ai-sdk/openai-compatible 覆盖了所有 OpenAI 兼容端点
+ * ——自建网关（new-api / one-api）、llama.cpp、Ollama、OpenRouter、DeepSeek、
+ * Mistral、月之暗面等都属此列，不需要一家装一个包。
+ *
+ * 选择顺序：
+ *   1. 请求里带 baseUrl（且通过白名单校验）→ 该端点
+ *   2. 服务端配了 AI_DEFAULT_BASE_URL       → 默认网关（用户无需在界面填）
+ *   3. 都没有                                → Google Gemini 直连
+ */
+function resolveModel({ modelName, baseUrl, apiKey }) {
+  const endpoint = (baseUrl || process.env.AI_DEFAULT_BASE_URL || '').trim();
+
+  if (endpoint) {
+    const gateway = createOpenAICompatible({
+      name: 'gateway',
+      baseURL: endpoint,
+      apiKey,
+    });
+    return gateway(modelName);
+  }
+
+  const google = createGoogleGenerativeAI({ apiKey });
+  return google(modelName);
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -196,7 +230,7 @@ function validateAiRequestBody(body) {
     modelName:
       typeof body.modelName === 'string' && body.modelName.trim()
         ? body.modelName.trim()
-        : 'gemini-3-flash-preview',
+        : process.env.AI_DEFAULT_MODEL || 'gemini-3-flash-preview',
     baseUrl,
   };
 }
@@ -244,20 +278,6 @@ function validateMemberPayload(payload) {
       isHighlight: Boolean(rawMember.isHighlight),
     },
   };
-}
-
-async function withTimeout(factory, timeoutMs, timeoutMessage) {
-  let timeoutId;
-  try {
-    return await Promise.race([
-      factory(),
-      new Promise((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
-      }),
-    ]);
-  } finally {
-    clearTimeout(timeoutId);
-  }
 }
 
 function inferSpouseGender(gender) {
@@ -384,43 +404,14 @@ app.post('/api/ai/generate', async (req, res) => {
   }
 
   try {
-    if (baseUrl && baseUrl.trim() !== '') {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
-      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [{ role: 'user', content: prompt }],
-          temperature: 0.7,
-        }),
-        signal: controller.signal,
-      }).finally(() => clearTimeout(timeoutId));
-
-      if (!response.ok) {
-        throw new Error(`API Request failed with status ${response.status}`);
-      }
-
-      const data = await response.json();
-      res.json({ content: data.choices?.[0]?.message?.content || '' });
-    } else {
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await withTimeout(
-        () =>
-          ai.models.generateContent({
-            model: modelName,
-            contents: prompt,
-          }),
-        AI_TIMEOUT_MS,
-        'AI request timed out'
-      );
-
-      res.json({ content: response.text || '' });
-    }
+    const { text } = await generateText({
+      model: resolveModel({ modelName, baseUrl, apiKey }),
+      prompt,
+      temperature: 0.7,
+      timeout: AI_TIMEOUT_MS,
+      maxRetries: 1,
+    });
+    res.json({ content: text || '' });
   } catch (error) {
     console.error('AI Generation Error:', error);
     res.status(500).json({ error: getErrorMessage(error) || 'AI 生成失败' });

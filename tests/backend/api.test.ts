@@ -92,6 +92,19 @@ describe('Backend API', () => {
     expect(res.body.error).toContain('允许列表');
   });
 
+  it('服务端配置的默认端点应自动可信（它来自 .env，不是请求方可控输入）', async () => {
+    process.env.AI_DEFAULT_BASE_URL = 'https://gateway.internal/v1';
+    try {
+      const res = await request(app)
+        .post('/api/ai/generate')
+        .send({ prompt: 'hi', baseUrl: 'https://gateway.internal/v1' });
+      // 不该被白名单拦下（400）；没有真实 key 时会走到后面的 500，那是另一回事
+      expect(res.status).not.toBe(400);
+    } finally {
+      delete process.env.AI_DEFAULT_BASE_URL;
+    }
+  });
+
   it('超长 prompt 应被拒绝', async () => {
     const res = await request(app)
       .post('/api/ai/generate')
