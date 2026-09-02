@@ -519,18 +519,39 @@ export function createZupuMcpServer(db) {
 }
 
 /**
- * 挂到 Express 上。无状态：每个请求一个新 transport，用完即弃。
+ * 挂到 Express 上。无状态：每个请求一套全新的 server + transport，用完即弃。
+ *
+ * ⚠️ server 必须每请求新建，不能在函数外建一个共用的（2026-09-02 之前就是那么写的）。
+ * SDK 的 Protocol.connect() 有硬检查：_transport 已存在就抛
+ * "Already connected to a transport"。共用一个 server 时请求串行还撑得住
+ * （靠 res.on('close') 及时清空），但两个并发请求里的后一个必然抛错 —— 而
+ * Express 4 不接 async 处理器抛出的错误，于是升级成 unhandledRejection，
+ * Node 进程退出。容器里 nginx 是另一个进程、照样活着，所以从外面看网页一切正常，
+ * 只有 /api 与 /mcp 静默 502。agent 并行发工具调用就会命中，实测 8 并发即中。
+ *
  * 规范要求 GET（服务端推送流）与 DELETE（结束会话）也要有响应；无状态模式下
  * 前者无流可开、后者无会话可结束，各回 405 并注明。
  */
 export function mountZupuMcp(app, path, db) {
-  const server = createZupuMcpServer(db);
-
-  app.post(path, async (req, res) => {
+  app.post(path, async (req, res, next) => {
+    const server = createZupuMcpServer(db);
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-    res.on('close', () => transport.close());
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
+
+    // 请求一结束就把这套拆掉，否则每个请求都留下一个活着的 server
+    res.on('close', () => {
+      Promise.resolve()
+        .then(() => transport.close())
+        .then(() => server.close())
+        .catch(() => {});
+    });
+
+    try {
+      await server.connect(transport);
+      await transport.handleRequest(req, res, req.body);
+    } catch (err) {
+      // 必须显式转交给错误中间件：Express 4 不会自己接住 async 处理器抛出的错误
+      next(err);
+    }
   });
 
   const notInStateless = (_req, res) => {
@@ -542,6 +563,4 @@ export function mountZupuMcp(app, path, db) {
   };
   app.get(path, notInStateless);
   app.delete(path, notInStateless);
-
-  return server;
 }

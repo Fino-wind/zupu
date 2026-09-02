@@ -1,0 +1,45 @@
+# 构建上下文瘦身 + 防止把不该进镜像的东西送进去。
+# 没有这份文件时，Dockerfile 的 `COPY . .` 会把下面这些全部塞进 builder 层：
+# node_modules（几百 MB，且是宿主机 macOS 编译的 sqlite3 原生模块，进了镜像也用不了）、
+# data/genealogy.db（族谱本体，会被烤进镜像层，谁 pull 谁就拿到了）、
+# .env（密钥）、.git（全部历史）。
+
+# 依赖：镜像里由 npm ci 重新装，宿主机这份不能用（原生模块平台不同）
+node_modules
+
+# 数据：族谱本体，运行时由 volume 挂载，绝不进镜像
+data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+genealogy.db
+
+# 密钥与本地配置
+.env
+.env.*
+!.env.example
+
+# 版本历史
+.git
+.gitignore
+.github
+
+# 构建产物：builder 阶段自己跑 vite build，宿主机这份只会干扰
+dist
+
+# 文档与开发期配置：不影响运行，进镜像只是浪费层
+docs
+README.md
+LICENSE
+tests
+.eslintrc.cjs
+.prettierrc
+vitest.config.ts
+vitest.config.api.ts
+
+# 编辑器 / 系统垃圾
+.DS_Store
+.vscode
+.idea
+*.log

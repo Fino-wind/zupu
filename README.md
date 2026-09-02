@@ -64,61 +64,31 @@ npm run dev
 
 为了确保您能在生产环境中顺利部署本系统，我们推荐使用 **Node.js + Nginx** 的混合部署方案。此方案将后端 API 与前端静态资源打包在同一个容器中，通过 Nginx 进行反向代理，既保证了性能又简化了配置。
 
-### 第一步：准备 Dockerfile
+### 第一步：确认 Dockerfile
 
-在项目根目录下创建一个名为 `Dockerfile` 的文件（如果没有），并将以下内容复制进去：
+**不需要自己写 —— 仓库根目录已经有一份能跑的 `Dockerfile`，直接用它。**
 
-```dockerfile
-# --- 构建阶段 ---
-FROM node:20-alpine as builder
-WORKDIR /app
-# 复制依赖配置
-COPY package*.json ./
-RUN npm install
-# 复制源码
-COPY . .
-# 构建前端 (生成 dist 目录)
-RUN npm run build
+> 📌 这里刻意不再贴一份「示例 Dockerfile」。
+> 早先版本贴过，结果它和真实那份逐渐对不上：示例里写的是 `COPY server.js ./`，
+> 而后端其实是 `server.js` + `mcp.js` 两个文件 —— 照着示例抄，
+> **镜像能构建成功、容器也能启动（nginx 起来了），但 `/api` 和 `/mcp` 全是 502**。
+> 一份会过时的副本比没有更糟，所以现在只留仓库里那一份。
 
-# --- 运行阶段 ---
-FROM node:18-alpine
-WORKDIR /app
+它做的事，简单说：
 
-# 安装 Nginx
-RUN apk add --no-cache nginx
+| 阶段 | 干什么 |
+|---|---|
+| builder | `node:20-alpine` → `npm ci` → `npm run build` 出前端静态文件 |
+| runtime | `node:20-alpine` + nginx → 只装生产依赖 → 复制 `server.js`、`mcp.js` 与前端产物 |
+| 运行 | nginx 在 8888 收所有请求：静态文件自己发，`/api` 与 `/mcp` 反代给 3001 的 Node |
 
-# 准备后端环境
-COPY package*.json ./
-RUN npm install --production
-COPY server.js ./
-# 初始化空的数据库文件(如果不存在)以避免启动报错
-RUN touch genealogy.db
+两个值得知道的细节：
 
-# 从构建阶段复制前端产物到 Nginx 目录
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# 配置 Nginx: 静态文件走 Nginx，/api 请求转发给 Node 后端
-RUN echo 'server { \
-    listen 80; \
-    location / { \
-        root /usr/share/nginx/html; \
-        index index.html index.htm; \
-        try_files $uri $uri/ /index.html; \
-    } \
-    location /api { \
-        proxy_pass http://127.0.0.1:3001; \
-        proxy_http_version 1.1; \
-        proxy_set_header Upgrade $http_upgrade; \
-        proxy_set_header Connection "upgrade"; \
-    } \
-}' > /etc/nginx/http.d/default.conf
-
-# 暴露 80 端口
-EXPOSE 80
-
-# 启动脚本: 并行启动 Nginx 和 Node 后端
-CMD nginx && node server.js
-```
+- **后端源码是逐个文件复制的**（`COPY server.js mcp.js ./`）。以后新增后端文件，
+  必须在那一行登记，否则就是上面说的「构建成功但 502」。CI 里有一步真的启动容器探活，专门挡这个。
+- **Node 是容器的 1 号进程，nginx 在后台**。这样 Node 崩了容器会整个退出，
+  Docker 的 `restart` 策略才拉得起来；反过来的话 Node 死了容器还是 Up，
+  网页照样打开，只有 API 静默失败，从外面完全看不出来。
 
 ### 第二步：构建镜像
 
@@ -159,6 +129,18 @@ docker run -d \
 - `-e API_KEY="..."`: 注入 AI 功能所需的密钥。
 - `-e DB_PATH=...`: 指定数据库文件路径（容器内）。
 - `-v $(pwd)/data:/app/data`: **核心配置**。将宿主机的 `data` 目录映射到容器内部。这样，无论您如何更新或重启容器，数据都会保存在宿主机该目录中。
+
+**如果你用的不是 Google Gemini**（比如指向自建的 new-api / llama.cpp / 任意 OpenAI 兼容网关），再加两个变量：
+
+```bash
+  -e AI_DEFAULT_BASE_URL="http://192.168.1.10:3000/v1" \
+  -e AI_DEFAULT_MODEL="你的模型名" \
+```
+
+⚠️ **容器只认显式传进去的环境变量**。把它们写进 `.env` 是不够的 —— `.env` 不进镜像，
+用 `docker run` 就得 `-e`，用 compose 就得列在 `environment:` 里（仓库那份已经列好了）。
+这个坑很难查，因为 `cat .env` 看着一切正常，但容器里读到的是空字符串。
+完整变量清单见 `.env.example`。
 
 ### 本机差异走 `.env`，不要改仓库文件
 

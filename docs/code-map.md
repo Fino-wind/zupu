@@ -98,7 +98,7 @@ zupu/                              ← 扁平布局，没有 src/
 └── metadata.json                  AI Studio 时代残留（requestFramePermissions），无人引用
 ```
 
-**没有的东西（别去找）**：`.dockerignore`（→ §18 ⚠️）· 数据库迁移目录（迁移逻辑在 `server.js` 里，§16）· 埋点（§11）· 服务端鉴权（§17）· `vercel.json`（Vercel 那个站是 GitHub 自动部署的纯静态壳，见 roadmap）。
+**没有的东西（别去找）**：数据库迁移目录（迁移逻辑在 `server.js` 里，§16）· 埋点（§11）· 服务端鉴权（§17）· `vercel.json`（Vercel 那个站是 GitHub 自动部署的纯静态壳，见 roadmap）。
 
 ---
 
@@ -191,11 +191,12 @@ calculateRelationshipLabel(target, center, all, locale)   [familyGraphUtils.ts]
   配偶 / 姻亲三种 → 祖先路径求 LCA → (up,down) 查表：直系 / 兄弟(排行+长幼) / 叔伯姑(与父比生年) / 侄 / 堂 / 族亲
 
 mountZupuMcp(app, '/mcp', db)                             [mcp.js]
-  ← server.js 顶层，在路由之后、listen 之前
-  createZupuMcpServer(db) 一次 → app.post：每请求 new StreamableHTTPServerTransport({sessionIdGenerator: undefined})
-    → res.on('close') → transport.close() → server.connect(transport) → transport.handleRequest(req,res,req.body)
+  ← server.js 顶层，在路由之后、错误中间件之前
+  app.post 回调内【每请求】：createZupuMcpServer(db) + new StreamableHTTPServerTransport({sessionIdGenerator: undefined})
+    → res.on('close') 里 transport.close() → server.close()
+    → try { server.connect(transport); transport.handleRequest(req,res,req.body) } catch → next(err)
   app.get / app.delete → 405 + Allow: POST
-  🔴 见 §14 ⑬：server 是共享单例，Protocol.connect 有「Already connected」硬检查
+  🔒 §14 ⑬：server 与 transport 都必须每请求新建；守卫是 tests/mcp-burst.mjs
 ```
 
 ---
@@ -220,13 +221,14 @@ mountZupuMcp(app, '/mcp', db)                             [mcp.js]
 
 后端
   server.js                  §15 / §16 / §17；导出 app/db/dbReady 供测试；NODE_ENV=test 时不 listen
+                             末尾三件兜底：错误中间件（4 参）· unhandledRejection（记录，不退出）· uncaughtException（记录后 shutdown(1)）
   mcp.js                     §15 MCP 段；领域函数 summarize / ancestorChain / computeKinship / buildTree / renderTreeText / pendingOf
 
 配置与部署
   Dockerfile / nginx.conf / docker-compose.yml / ci.yml   → §18
   .env.example               变量清单；⚠️ 它描述的是【裸跑 node】能读到的变量，Docker 下只有 compose 转发的那几个生效（§18）
   seed.example.json          与 §16 字段一一对应，含一个 isDeleted:true 示例
-  vite.config.ts             dev 时 /api 反代到 3001；⚠️ 没有反代 /mcp（dev 模式下 MCP 只能直连 3001）
+  vite.config.ts             dev 时 /api 与 /mcp 都反代到 3001（2026-09-02 补的 /mcp，此前 dev 下只能直连 3001）
   .eslintrc.cjs              --ext ts,tsx → server.js / mcp.js 两份后端 JS【零 lint 覆盖】
   start.sh                   死文件（heredoc 壳），删掉不影响任何东西
   metadata.json              AI Studio 残留，无引用
@@ -301,10 +303,10 @@ DraggableNode（memo）
 
 ```
 db: sqlite3.Database         一个句柄，REST 与 MCP 共用；serialize 只在启动迁移里用
-dbReady: Promise             initTable → migrateLegacySpouseNodes；⚠️ app.listen 不等它（§14 ⑫）
+dbReady: Promise             initTable → migrateLegacySpouseNodes；app.listen 在它 resolve 之后才调（§14 ⑫）
 process.env                  API_KEY / AI_DEFAULT_BASE_URL / AI_DEFAULT_MODEL / AI_ALLOWED_BASE_URLS / ALLOWED_ORIGINS / DB_PATH
                              ⚠️ isAllowedBaseUrl 每次请求现读 env（测试里靠这个临时改）
-McpServer 单例               createZupuMcpServer(db) 只调一次（§14 ⑬）
+McpServer                    【无】进程级实例：每个 /mcp 请求现建现弃（§14 ⑬）
 ```
 
 ---
@@ -531,21 +533,29 @@ agent ────────MCP──▶ mcp.js 工具 ─────┘
 **⑪ 前端写入不等待后端成功，且离线影子不回写。**
 `saveMemberToDb` 失败只吐司；state 与 `familyMembers_backup` 照常更新；下次成功 fetch 用服务端数据覆盖。这是现状不是设计目标（README 的「恢复后同步」说法不成立），改它要先决定冲突策略。
 
-**⑫ `app.listen` 不等待 `dbReady`。**
-表由 `CREATE TABLE IF NOT EXISTS` 异步建；进程启动后头几毫秒的请求可能撞到 `no such table`。CI 探活是轮询所以看不见。要改成等待时注意测试里 `NODE_ENV=test` 不 listen、直接 `await dbReady`。
+**⑫ `app.listen` 必须等 `dbReady` resolve 之后再调。**（2026-09-02 修，此前不等）
+建表是异步的（`CREATE TABLE IF NOT EXISTS`），先 listen 的话启动头几毫秒的请求会撞 `no such table`；CI 探活是轮询，看不见这个窗口。现在写法是 `dbReady.then(() => app.listen(...))`，失败则打日志 + `exit(1)`（容器会拉起重试）。
+测试不受影响：`NODE_ENV==='test'` 时根本不 listen，两份后端测试各自 `await dbReady`。
 
-**⑬ 每个 `/mcp` 请求必须有独立的 transport，且 `Protocol`（McpServer）实例不能被并发请求共享。**
-SDK 的 `Protocol.connect` 有硬检查：`_transport` 已存在就 `throw 'Already connected to a transport'`；只有前一个 transport `close()` 后才清空。当前 `mountZupuMcp` 是**一个 McpServer 单例 + 每请求 new transport** —— 请求串行时靠 `res.on('close')` 及时清空撑得住；**并发时第二个请求在 `server.connect` 抛错，Express 4 不捕获 async 错误 → unhandled rejection → Node 进程退出**（nginx 仍活着，容器仍 Up，`/api` `/mcp` 全 502，形态与 ⑤ 相同）。
-🔴 **2026-09-02 在 fino 实测触发过一次**（8 个并发 `tools/call list_members`，Node 当场退出，`docker restart` 恢复）—— agent 并行发工具调用（Claude Code 默认行为）就会命中。修法 = 每请求 `createZupuMcpServer(db)`（官方无状态示例正是这么写的）或加 `process.on('unhandledRejection')` + express 错误中间件兜底；两者都做。**具体待办见 roadmap。**
+**⑬ 每个 `/mcp` 请求必须有独立的 transport **和独立的 `McpServer`**；两者都不能跨请求共享。**
+SDK 的 `Protocol.connect` 有硬检查：`_transport` 已存在就 `throw 'Already connected to a transport'`，只有前一个 transport `close()` 后才清空。所以 `mountZupuMcp` 里 **`createZupuMcpServer(db)` 必须写在 `app.post` 的回调内部**（每请求新建），不能写在回调外面。
+✅ **2026-09-02 已修**（此前是"一个单例 + 每请求 new transport"）。同批加的兜底：`app.post` 用 try/catch → `next(err)`、`server.js` 末尾的错误中间件、`unhandledRejection` / `uncaughtException` 处理器。
+🔴 **破了会怎样**：并发时后一个请求在 `server.connect` 抛错 → Express 4 不捕获 async 错误 → unhandledRejection → Node 退出；nginx 是另一个进程、仍然活着，所以**容器 Up、网页 200、只有 `/api` `/mcp` 静默 502**（形态与 ⑤ 相同）。agent 并行发工具调用是常态，必中。
+🧪 **守卫 = `tests/mcp-burst.mjs`**（CI docker job 调用，16 并发）。**这个 bug 用 curl 测不出来** —— 实测 8 个 curl 进程并发打 `initialize`，有 bug 的旧代码也全部 200，因为 fork 时间差让它们实际串行。复现必须同时满足：单进程 `Promise.all` 发起 + 用 `tools/call`（要查库，重叠窗口才够大）。旧代码在该条件下的表现：第 1 个 200，其余全部 ECONNRESET，进程当场退出。**改这块之后跑一遍那个脚本，别只跑 vitest。**
 
 **⑭ 环境变量只有经 `docker-compose.yml` 的 `environment:` 转发的那几个能进容器；`.env` 本身不进运行镜像。**
-当前只转发 `API_KEY` 与 `DB_PATH`。在 fino 的 `.env` 里写 `AI_DEFAULT_BASE_URL` / `AI_DEFAULT_MODEL` / `AI_ALLOWED_BASE_URLS` / `ALLOWED_ORIGINS` **不会生效**，除非同步加进 compose。`.env.example` 描述的是裸跑 `node server.js`（dotenv 读 cwd/.env）的行为。
+2026-09-02 起转发 6 个：`API_KEY` · `DB_PATH` · `AI_DEFAULT_BASE_URL` · `AI_DEFAULT_MODEL` · `AI_ALLOWED_BASE_URLS` · `ALLOWED_ORIGINS`（后四个带 `:-` 默认空值，没设也不会报错）。
+**再加新变量时同样要在 compose 里登记一行**，否则 `.env` 里写了也进不去容器 —— 这个坑极难查，因为 `cat .env` 看着完全正常，得进容器 `echo ${#VAR}` 才看得出是空的。`.env.example` 描述的是裸跑 `node server.js`（dotenv 读 cwd/.env）的行为。
 
 **⑮ nginx 反代 `proxy_pass` 不带尾斜杠；配置文件放 `/etc/nginx/http.d/`。**
 带尾斜杠会把 `/api/members` 剥成 `/members` → 404；放 `conf.d/` 在 alpine 镜像里根本不被 include（→ PM-2026-09-01-nginx-confd）。`/mcp` 那个 location 还必须 `proxy_buffering off`，否则 SSE 事件被攒住。
 
-**⑯ 容器里 nginx 是 PID 1，node 是后台子进程。**
-node 死了容器不会重启（`restart: unless-stopped` 只看 PID 1）。所以 ⑤ ⑬ 这类"后端死、前端活"的故障，症状永远是「首页 200、其余 502」。排查这类症状先 `docker logs` 找 Node 的退出栈，别先怀疑 nginx。
+**⑯ 容器里 node 是 PID 1，nginx 是后台子进程。**（2026-09-02 反转，此前是相反的）
+`CMD ["sh", "-c", "nginx -g 'daemon off;' & exec node server.js"]` —— `exec` 让 node 顶替 shell 成为 1 号进程。这么排有两个理由：
+· **node 崩 → 容器退出 → `restart: unless-stopped` 自动拉起。** 反过来的话 node 死了容器还是 Up，网页照常 200，只有 `/api` `/mcp` 静默 502，从外面完全看不出来，得有人手动 `docker restart`。
+· **`docker stop` 的 SIGTERM 直达 node**，`server.js` 的 SIGTERM 处理器才收得到，sqlite 才走得到 `db.close()`。此前 SIGTERM 发给 nginx，那个处理器从来没被触发过。
+代价：nginx 挂了容器不退出。**这是有意的取舍** —— nginx 挂是"网页整个打不开"的显性故障，node 挂是隐性的，所以让隐性的那个当 PID 1。
+排查「首页 200、其余 502」仍然先 `docker logs` 找 Node 的退出栈，别先怀疑 nginx。
 
 ⚠️ **加新的写路径 / 新入口（第四个入口、第二张表）之前，把它画进 §12 再对一遍 ①⑦⑨⑩。**
 
@@ -554,10 +564,11 @@ node 死了容器不会重启（`restart: unless-stopped` 只看 PID 1）。所�
 ## §15 · 路由清单
 
 ```
-中间件顺序（server.js 顶层）：cors(白名单函数) → express.json({limit:'512kb'}) → 路由 → mountZupuMcp
-  · 没有错误处理中间件；async 路由抛错 = 进程级 unhandledRejection（Node 20 默认崩，见 §14 ⑬）
+中间件顺序（server.js 顶层）：cors(白名单函数) → express.json({limit:'512kb'}) → 路由 → mountZupuMcp → 错误中间件
+  · 错误中间件写满 4 个参数（Express 靠参数个数认它，少一个就静默退化成普通中间件）；
+    headersSent 时只 res.end()（SSE 流写到一半不能再写 JSON）
   · CORS：无 Origin 头放行；DEFAULT_DEV_ORIGINS(5021/4173/8888 的 localhost 与 127.0.0.1) ∪ ALLOWED_ORIGINS；其余 callback(Error)
-    ⚠️ 那个 Error 同样没有错误中间件接 → 被拒的跨域请求拿到的是 Express 默认 500 HTML
+    → 现由错误中间件接住，回 403 JSON「来源不在白名单内」（此前是 Express 默认的 500 HTML）
 
 METHOD  路径                      处理                          备注
 POST    /api/ai/generate          validateAiRequestBody→generateText   400 校验 / 500 无密钥或模型错；15s 超时
@@ -574,7 +585,7 @@ MCP 工具（10 个，注册顺序即列表顺序）：
 
 反代与本地开发的路径映射：
   Docker  nginx :8888 →  ^~ /assets/ 静态(30d cache) · = /mcp → 3001(无缓冲) · ^~ /api/ → 3001 · / → SPA fallback
-  Dev     vite :5021 → /api → 3001；⚠️ /mcp 没有代理，dev 下 MCP 客户端直连 http://localhost:3001/mcp
+  Dev     vite :5021 → /api 与 /mcp 都反代到 3001（与 Docker 下同端口同路径，两边行为一致）
 ```
 
 ---
@@ -621,23 +632,31 @@ FamilyMember 字段（前后端隐性契约，后端是 JS 没有类型）：
 
 ```
 Dockerfile（两阶段）
-  builder  node:20-alpine → COPY package.json → npm install（⚠️ 不用 lock，与 CI check 的 npm ci 解析可能不同）
-           → COPY . .（⚠️ 无 .dockerignore：node_modules / data/*.db / .env / .git / dist 全进构建上下文与 builder 层）
+  builder  node:20-alpine → COPY package.json package-lock.json → npm ci（与 CI check 同一套解析）
+           → COPY . .（受 .dockerignore 约束：node_modules / data / *.db / .env / .git / dist / docs / tests 都不进上下文）
            → npm run build（tsc && vite build）
-  runtime  node:20-alpine + apk nginx → npm install --omit=dev → COPY server.js mcp.js ./（§14 ⑤）
+  runtime  node:20-alpine + apk nginx → npm ci --omit=dev → COPY server.js mcp.js ./（§14 ⑤）
            → COPY --from=builder dist → /usr/share/nginx/html · nginx.conf → /etc/nginx/http.d/default.conf
-           → CMD sh -lc "node server.js & nginx -g 'daemon off;'"（§14 ⑯）
+           → CMD sh -c "nginx -g 'daemon off;' & exec node server.js"（node 是 PID 1，§14 ⑯）
   环境：NODE_ENV=production · DB_PATH=/app/data/genealogy.db · EXPOSE 8888
 
+.dockerignore（2026-09-02 补）
+  最要紧的两条：node_modules（宿主机编译的 sqlite3 原生模块，进了镜像也用不了）
+  与 data/*.db（族谱本体，会被烤进镜像层，谁 pull 谁就拿到全部数据）
+
 docker-compose.yml
-  build.args NPM_REGISTRY ← .env · ports ${HOST_PORT:-8888}:8888 · environment 只有 API_KEY / DB_PATH（§14 ⑭）
-  volume ./data:/app/data · restart unless-stopped
+  build.args NPM_REGISTRY ← .env · ports ${HOST_PORT:-8888}:8888
+  environment 6 个：API_KEY · DB_PATH · AI_DEFAULT_BASE_URL · AI_DEFAULT_MODEL · AI_ALLOWED_BASE_URLS · ALLOWED_ORIGINS（§14 ⑭）
+  volume ./data:/app/data · restart unless-stopped（配合 node 当 PID 1 才真的能自愈）
   fino 实例：~/projects/zupu，HOST_PORT=8889，容器名 zupu-chrono-genealogy-1
 
 CI（.github/workflows/ci.yml）
   check  npm ci → typecheck → lint（只 ts/tsx）→ vitest(前端) → test:api(后端两份)
-  docker build → docker run -p 8888 → 轮询 /api/members ≤20s → curl / · /api/members · POST /mcp initialize 必须 200 → rm
-  🔑 探活是为 PM-2026-09-02-dockerfile-copy-mcp 加的：build 绿 ≠ 能起
+  docker setup-node → build → docker run -p 8888 → 轮询 /api/members ≤20s
+         → curl / · /api/members · POST /mcp initialize 必须 200
+         → node tests/mcp-burst.mjs（16 并发 tools/call + 之后后端仍存活）→ rm
+  🔑 两个守卫各挡一类事故：起容器探活挡 PM-2026-09-02-dockerfile-copy-mcp（build 绿 ≠ 能起）；
+     并发脚本挡 §14 ⑬（单发请求测不出来，curl 也测不出来）
 
 Vercel（zupu-nine.vercel.app）
   GitHub 自动部署的纯静态构建，没有 server.js → /api /mcp 全 404，只是演示壳；数据只在访问者浏览器 localStorage。详见 roadmap。

@@ -35,6 +35,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # 探活脚本 tests/mcp-burst.mjs 用了 top-level await 与全局 fetch，
+      # 别靠 runner 自带的 node 版本碰运气
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       # 镜像能不能构建出来，比任何单元测试都更接近"别人 clone 下来能不能跑"
       - name: 构建镜像
         run: docker build -t chrono-genealogy:ci .
@@ -56,4 +63,15 @@ jobs:
             -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}')
           [ "$code" = 200 ] || { echo "MCP initialize 返回 $code"; docker logs ci-zupu; exit 1; }
           echo "✅ 静态页 / REST / MCP 三个入口全通"
+
+          # 并发守卫（对应 code-map §14 ⑬）：MCP 曾共用一个 McpServer 单例，
+          # SDK 的 Protocol.connect 拒绝二次连接 → 并发时后一个请求抛错 →
+          # Express 4 不接 async 错误 → unhandledRejection → Node 退出，
+          # 而 nginx 还活着，所以容器 Up、网页 200、只有 /api /mcp 静默 502。
+          #
+          # ⚠️ 判据放在脚本里，不用 curl：实测 8 个 curl 进程并发打 initialize
+          # 连有 bug 的旧代码都能全过（fork 时间差让它们实际串行）。假守卫比没守卫更坏。
+          node tests/mcp-burst.mjs http://127.0.0.1:8888 16 \
+            || { echo "❌ MCP 并发守卫失败"; docker logs ci-zupu; exit 1; }
+
           docker rm -f ci-zupu

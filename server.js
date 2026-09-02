@@ -559,18 +559,60 @@ app.delete('/api/members/:id', (req, res) => {
 // MCP：让任何 agent 通过 Streamable HTTP 读写族谱。见 mcp.js 顶部说明。
 mountZupuMcp(app, '/mcp', db);
 
-// Only listen if not imported for testing
-if (process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
-    console.log(`Backend server running on http://localhost:${PORT}`);
+// 兜底错误中间件。必须放在【所有路由之后】，且必须写满 4 个参数 ——
+// Express 靠参数个数认错误中间件，少一个就退化成普通中间件，静默失效。
+// 没有它时：CORS 拒绝抛出的 Error 会变成 Express 默认的 500 HTML 页面，
+// async 路由抛出的错误则根本没人接。
+app.use((err, req, res, _next) => {
+  const isCorsRejection = err && err.message === 'Origin not allowed';
+  if (!isCorsRejection) {
+    console.error(`请求出错 ${req.method} ${req.originalUrl}:`, err);
+  }
+  // 响应头已经发出去了（比如 MCP 的 SSE 流写到一半），只能掐断，不能再写 JSON
+  if (res.headersSent) {
+    res.end();
+    return;
+  }
+  res
+    .status(isCorsRejection ? 403 : 500)
+    .json({ error: isCorsRejection ? '来源不在白名单内' : '服务器内部错误' });
+});
+
+// 最后一道防线。容器里 nginx 与 node 是两个进程，node 静默退出时网页照样能打开，
+// 只有 /api 与 /mcp 502 —— 这种故障不写日志就查不出来。见 docs/code-map.md §14 ⑬ ⑯。
+process.on('unhandledRejection', (reason) => {
+  // 单个请求的漏网 Promise，不值得赔上整个进程；记下来继续服务。
+  console.error('未处理的 Promise 拒绝（进程继续运行）:', reason);
+});
+process.on('uncaughtException', (err) => {
+  // 到这一步进程状态已不可信，硬撑下去只会写坏数据。
+  // 记录后退出，交给容器的 restart 策略拉起（Dockerfile 已让 node 成为 PID 1）。
+  console.error('未捕获的异常，进程即将退出:', err);
+  shutdown(1);
+});
+
+// 用函数声明而非 const：它被上面的 uncaughtException 处理器引用，
+// 而那个处理器可能在模块还没执行到这一行时就被触发（const 会撞 TDZ）。
+function shutdown(code = 0) {
+  db.close(() => {
+    process.exit(code);
   });
 }
 
-const shutdown = () => {
-  db.close(() => {
-    process.exit(0);
-  });
-};
+process.on('SIGINT', () => shutdown(0));
+process.on('SIGTERM', () => shutdown(0));
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+// Only listen if not imported for testing
+// ⚠️ 必须等 dbReady：建表是异步的，先 listen 的话启动头几毫秒的请求会撞 no such table。
+if (process.env.NODE_ENV !== 'test') {
+  dbReady
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Backend server running on http://localhost:${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error('数据库初始化失败，服务不启动:', err);
+      process.exit(1);
+    });
+}

@@ -8,9 +8,19 @@ services:
     # 宿主端口冲突时，在 .env 里设 HOST_PORT，无需改本文件
     ports:
       - '${HOST_PORT:-8888}:8888'
+    # ⚠️ .env 本身不进镜像；只有在这里列出来的变量才进得了容器。
+    # 在 .env 里写了却没登记在这里的变量，容器内读到的是空 —— 排查时极难发现，
+    # 因为 `cat .env` 看着是对的。见 docs/code-map.md §14 ⑭。
     environment:
       - API_KEY=${API_KEY}
       - DB_PATH=/app/data/genealogy.db
+      # AI 端点：自托管网关（如内网 new-api / llama.cpp）填这两个
+      - AI_DEFAULT_BASE_URL=${AI_DEFAULT_BASE_URL:-}
+      - AI_DEFAULT_MODEL=${AI_DEFAULT_MODEL:-}
+      # 允许"用服务端密钥"打的端点白名单（逗号分隔）
+      - AI_ALLOWED_BASE_URLS=${AI_ALLOWED_BASE_URLS:-}
+      # 跨域白名单（逗号分隔）；默认只放行同源与本地开发端口
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
