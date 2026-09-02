@@ -30,7 +30,8 @@ COPY package.json ./
 RUN npm install --omit=dev
 
 # 后端代码
-COPY server.js ./
+# ⚠️ 后端源码是逐文件复制的：新增后端文件必须在这里登记，否则镜像能构建、容器起不来
+COPY server.js mcp.js ./
 
 # SQLite 数据目录（挂载 volume）
 RUN mkdir -p /app/data

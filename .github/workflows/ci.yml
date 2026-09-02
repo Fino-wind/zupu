@@ -38,3 +38,22 @@ jobs:
       # 镜像能不能构建出来，比任何单元测试都更接近"别人 clone 下来能不能跑"
       - name: 构建镜像
         run: docker build -t chrono-genealogy:ci .
+
+      # 构建成功 ≠ 能起来：Dockerfile 漏 COPY 一个文件，镜像照样构建成功、容器启动即死。
+      # 所以真起一次，三个入口都要通：静态页、REST、MCP。
+      - name: 启动容器并探活
+        run: |
+          docker run -d --name ci-zupu -p 8888:8888 -e DB_PATH=/app/data/genealogy.db chrono-genealogy:ci
+          for i in $(seq 1 20); do
+            sleep 1
+            curl -sf http://127.0.0.1:8888/api/members >/dev/null && break
+            [ "$i" = 20 ] && { echo "后端 20 秒未就绪"; docker logs ci-zupu; exit 1; }
+          done
+          curl -sf -o /dev/null http://127.0.0.1:8888/          || { echo "前端不通"; exit 1; }
+          curl -sf http://127.0.0.1:8888/api/members >/dev/null || { echo "REST 不通"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8888/mcp \
+            -H 'Content-Type: application/json' -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"ci","version":"0"}}}')
+          [ "$code" = 200 ] || { echo "MCP initialize 返回 $code"; docker logs ci-zupu; exit 1; }
+          echo "✅ 静态页 / REST / MCP 三个入口全通"
+          docker rm -f ci-zupu
