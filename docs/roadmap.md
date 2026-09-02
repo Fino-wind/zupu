@@ -35,7 +35,10 @@
 
 
 - **Vercel 站上老大说"有记录"，但记录不在 Mac 任何浏览器里**（09-02 扫了日常 Chrome / 专用 Chrome / Safari / Edge 的 localStorage 与 leveldb，零命中）。Vercel 部署 14 次全是纯静态（12s-2m），从没跑过 server.js，数据只能在某浏览器 `localStorage['familyMembers_backup']`。大概率 iPhone Safari。**老大自查路径**：手机开 `zupu-nine.vercel.app` → 宗主认证 `miling` → 📤导出族谱 → JSON 发我 → 对比 fino 那 5 条合并。⚠️ 别清手机 Safari 网站数据。
-- **Vercel 连着 GitHub 自动部署**：每次 push 都重建（09-02 一天 10 次）。它没有后端，`/api` `/mcp` 都 404 —— 那个站现在只是个"空壳演示"。要么在 Vercel 关掉自动部署，要么接受它一直是空的。
+- [x] ~~Vercel 自动部署~~ → **2026-09-02 老大拍板关掉**，用 `vercel.json` 的 `ignoreCommand: "exit 0"`（Vercel 约定：exit 0 = 跳过构建）。
+  **只关构建，站点与既有部署仍在线** —— 因为下面那条「手机上那份记录」还得靠打开那个站导出。**导出完成前别删项目、别改域名。**
+  ⚠️ 仓库是公开的，`exit 0` 对任何 fork 者都生效，所以 README 顶部加了一节说明它是什么、想构建就删掉这个文件。
+  要更彻底可去 Vercel 后台断开 Git 集成（本轮没做，那要动后台登录态）。
 - **默认口令 `miling` 明晃晃写在设置页**（「当前密令（默认为 miling）」）且是纯前端比对。不是安全边界（README 已写明无鉴权），但界面上就能改，建议改掉。
 - [x] ~~`zupu_cli.py delete` 改名~~ → 已改 `archive`，保留 `delete` 作别名（2026-09-02）。**CLI 仍缺 `restore`**（后端没有 restore 路由，要靠 GET 全量 → 改 isDeleted → POST 全量覆盖三步；MCP 有 `restore_member` 可直接用）。
 
@@ -51,7 +54,6 @@
 
 ### ⏸ 等老大决定（不动代码，先问）
 
-- **Vercel 自动部署**：关掉，还是接受它一直是个 `/api` `/mcp` 全 404 的空壳？（每次 push 都白重建一次）
 - **默认口令 `miling`**：设置页上明写「当前密令（默认为 miling）」，纯前端比对。不是安全边界，但要不要换个词？换了老大自己要记。
 - **Vercel 站上那份记录**：仍需老大在手机上导出（路径见下方原条目）。
 

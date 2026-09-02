@@ -95,10 +95,12 @@ zupu/                              ← 扁平布局，没有 src/
 ├── vitest.config.ts / vitest.config.api.ts   前端(jsdom) / 后端(node) 两套
 ├── tailwind.config.cjs · postcss.config.cjs · .eslintrc.cjs · tsconfig.json
 ├── start.sh                       ⚠️ 死文件：内容是写 start.sh 的 heredoc 壳，Dockerfile 没用它
-└── metadata.json                  AI Studio 时代残留（requestFramePermissions），无人引用
+├── metadata.json                  AI Studio 时代残留（requestFramePermissions），无人引用
+├── .dockerignore                  构建上下文瘦身；最要紧的是挡住 node_modules 与 data/*.db
+└── vercel.json                    只有一行 ignoreCommand: "exit 0" = 让 Vercel 永远跳过构建（见 §18）
 ```
 
-**没有的东西（别去找）**：数据库迁移目录（迁移逻辑在 `server.js` 里，§16）· 埋点（§11）· 服务端鉴权（§17）· `vercel.json`（Vercel 那个站是 GitHub 自动部署的纯静态壳，见 roadmap）。
+**没有的东西（别去找）**：数据库迁移目录（迁移逻辑在 `server.js` 里，§16）· 埋点（§11）· 服务端鉴权（§17）。
 
 ---
 
@@ -659,7 +661,13 @@ CI（.github/workflows/ci.yml）
      并发脚本挡 §14 ⑬（单发请求测不出来，curl 也测不出来）
 
 Vercel（zupu-nine.vercel.app）
-  GitHub 自动部署的纯静态构建，没有 server.js → /api /mcp 全 404，只是演示壳；数据只在访问者浏览器 localStorage。详见 roadmap。
+  历史遗留项目，连着 GitHub 自动部署。它是纯静态构建、没有 server.js → /api /mcp 全 404，
+  数据只活在访问者浏览器的 localStorage 里。
+  🔕 **2026-09-02 起已用 `vercel.json` 的 `ignoreCommand: "exit 0"` 关掉自动构建**
+     （Vercel 约定：该命令 exit 0 = 忽略本次构建，exit 1 = 正常构建；vercel.json 覆盖后台的 Ignored Build Step）。
+     ⚠️ **只关了构建，站点与既有部署仍在线** —— 这是刻意的：老大手机 Safari 里可能还存着一份
+     从没同步到 fino 的族谱记录，得靠打开那个站导出（roadmap P1）。**在他导出之前，别删项目、别改域名。**
+     要恢复自动构建就删掉 vercel.json；要更彻底就去 Vercel 后台断开 Git 集成。
 
 本地开发
   npm run dev = concurrently(node server.js, vite --port 5021)；.env 由 dotenv 读；sqlite 在 ./genealogy.db
