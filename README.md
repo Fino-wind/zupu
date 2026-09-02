@@ -190,6 +190,42 @@ API_KEY=your_api_key_here docker compose up -d --build
 如果您看到“开宗立派”界面，说明部署成功。
 您可以尝试创建一个始祖，然后重启容器 `docker restart my-genealogy`。如果重启后数据依然存在，说明数据持久化配置正确。
 
+## 🤖 MCP：让任何 AI agent 读写这份族谱
+
+服务启动后，`/mcp` 就是一个 [MCP](https://modelcontextprotocol.io) 端点（Streamable HTTP，无状态）。
+**不需要额外安装任何东西** —— 在你的 AI 工具里加一个 URL 即可：
+
+```bash
+# Claude Code
+claude mcp add --transport http zupu http://localhost:8888/mcp
+
+# 其它支持 MCP 的客户端（Claude Desktop / Cursor / hermes …）
+# 传输选 Streamable HTTP，地址填 http://<主机>:<端口>/mcp
+```
+
+之后你可以直接对 AI 说「把爷爷口述的这段补进族谱」「算一下我和堂叔是什么关系」「还有谁的资料没填齐」。
+
+**10 个工具**，7 读 3 写：
+
+| 工具 | 做什么 |
+|---|---|
+| `list_members` / `get_member` / `search_members` | 列表、单人完整记录（含志传）、检索 |
+| `get_lineage_tree` | 整部世系树，逐代展开 |
+| `get_ancestors` | 某人的直系祖先链 |
+| `get_kinship` | 推算两人关系：直系尊长 / 直系卑亲 / 旁系 / 无交集 |
+| `list_pending` | 谁的姓名 / 生年 / 志传还没考证 —— 安排口述采访用 |
+| `upsert_member` | 新增或**合并**更新（只改你传的字段，绝不清空已有志传）|
+| `archive_member` / `restore_member` | 归档到宗祠秘档 / 还原。**没有不可逆的删除** |
+
+每个工具都带 `title` 与 `readOnlyHint` / `destructiveHint` 标注，且返回结构化数据（`structuredContent`），
+符合 [Claude connector 审核标准](https://claude.com/docs/connectors/building/review-criteria)。
+只有 `archive_member` 标为 destructive —— 也就是说，Claude 只会在归档时向你确认，其余操作直接执行。
+
+> **协议版本**：2025-11-25（当前 SDK 所支持的最新版）。2026-07-28 规范已发布但尚无 SDK 与客户端实现；
+> 本实现已按其原则（无状态、不用 Roots/Sampling/Logging、工具顺序确定）编写，届时迁移只需换传输层。
+
+⚠️ MCP 端点与 REST API 一样**无鉴权** —— 见下方安全须知。
+
 ## 🌱 第一次打开是空的？
 
 系统不预置任何数据——新部署打开时是一片空白的「开宗立派」界面，这是刻意的：

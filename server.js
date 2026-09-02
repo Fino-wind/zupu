@@ -8,6 +8,7 @@ import { generateText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import dotenv from 'dotenv';
+import { mountZupuMcp } from './mcp.js';
 
 dotenv.config();
 
@@ -554,6 +555,9 @@ app.delete('/api/members/:id', (req, res) => {
     );
   });
 });
+
+// MCP：让任何 agent 通过 Streamable HTTP 读写族谱。见 mcp.js 顶部说明。
+mountZupuMcp(app, '/mcp', db);
 
 // Only listen if not imported for testing
 if (process.env.NODE_ENV !== 'test') {

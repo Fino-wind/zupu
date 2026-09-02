@@ -16,6 +16,7 @@
   "dependencies": {
     "@ai-sdk/google": "^4.0.61",
     "@ai-sdk/openai-compatible": "^3.0.42",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "ai": "^7.0.89",
     "concurrently": "^8.2.2",
     "cors": "^2.8.5",
@@ -25,7 +26,8 @@
     "lucide-react": "^0.561.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.9.1",
