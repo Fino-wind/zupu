@@ -4,7 +4,17 @@ import { FamilyMember, Locale } from '../types';
 export interface AISettings {
   baseUrl?: string;
   modelName: string;
-  apiKey?: string; // Kept for interface compatibility, but ignored by backend-proxy logic usually
+  /**
+   * 用户自己的 API 密钥，可选。
+   *
+   * 填了就随请求发给本项目自己的后端，由后端拿它去调模型——只在"你的浏览器"
+   * 和"你自己部署的服务器"之间传递，不会交给任何第三方。
+   * 不填则使用部署者在服务端配置的密钥。
+   *
+   * 之所以不在浏览器里直接调模型厂商：Anthropic 等厂商不允许跨域直连，
+   * 走自己的后端才能对所有供应商一视同仁。
+   */
+  apiKey?: string;
 }
 
 const AI_REQUEST_TIMEOUT = 15000;
@@ -26,6 +36,7 @@ const generateContent = async (prompt: string, settings?: AISettings) => {
         prompt,
         modelName: settings?.modelName,
         baseUrl: settings?.baseUrl,
+        apiKey: settings?.apiKey,
       }),
       signal: controller.signal,
     });

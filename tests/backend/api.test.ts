@@ -105,6 +105,38 @@ describe('Backend API', () => {
     }
   });
 
+  it('自带密钥时可使用任意端点（白名单只约束"花服务端的钱"）', async () => {
+    // 端口 1 上不会有服务，连接被立即拒绝——这里要断言的是"没被白名单挡在门外"，
+    // 不是"能连上"。用能立即失败的地址，避免走 DNS 把测试拖到超时。
+    const res = await request(app).post('/api/ai/generate').send({
+      prompt: 'hi',
+      baseUrl: 'http://127.0.0.1:1/v1',
+      apiKey: 'user-supplied-key',
+    });
+    expect(res.status).not.toBe(400);
+    expect(res.status).toBe(500); // 放行了，然后才因为连不上而失败
+  }, 20000);
+
+  it('未带密钥时，非白名单端点仍必须拒绝', async () => {
+    const res = await request(app)
+      .post('/api/ai/generate')
+      .send({ prompt: 'hi', baseUrl: 'http://attacker.example.com' });
+    expect(res.status).toBe(400);
+  });
+
+  it('两边都没有密钥时，报错要同时指出两条出路', async () => {
+    const saved = process.env.API_KEY;
+    delete process.env.API_KEY;
+    try {
+      const res = await request(app).post('/api/ai/generate').send({ prompt: 'hi' });
+      expect(res.status).toBe(500);
+      expect(res.body.error).toContain('界面');
+      expect(res.body.error).toContain('.env');
+    } finally {
+      if (saved !== undefined) process.env.API_KEY = saved;
+    }
+  });
+
   it('超长 prompt 应被拒绝', async () => {
     const res = await request(app)
       .post('/api/ai/generate')

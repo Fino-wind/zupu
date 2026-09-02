@@ -218,15 +218,22 @@ function validateAiRequestBody(body) {
   }
 
   const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : '';
-  if (baseUrl && !isAllowedBaseUrl(baseUrl)) {
+  const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+
+  // 白名单只约束「花服务端的钱」这种情况。
+  // 自带密钥时放行任意端点——用自己的钥匙开自己想开的门，本来就不该由服务端裁决；
+  // 而白名单存在的理由（别人拿服务端的 API_KEY 去打他控制的地址）此时并不成立。
+  if (baseUrl && !apiKey && !isAllowedBaseUrl(baseUrl)) {
     return {
       error:
-        '该 AI 端点不在允许列表中。如需使用自定义端点，请在服务端 .env 的 AI_ALLOWED_BASE_URLS 中登记。',
+        '该 AI 端点不在允许列表中。你可以在界面里填入自己的 API 密钥后使用任意端点；' +
+        '若想让所有人共用服务端密钥访问该端点，请在 .env 的 AI_ALLOWED_BASE_URLS 中登记。',
     };
   }
 
   return {
     prompt,
+    apiKey,
     modelName:
       typeof body.modelName === 'string' && body.modelName.trim()
         ? body.modelName.trim()
@@ -395,11 +402,18 @@ app.post('/api/ai/generate', async (req, res) => {
     return;
   }
 
-  const { prompt, modelName, baseUrl } = requestBody;
-  const apiKey = process.env.API_KEY;
+  const { prompt, modelName, baseUrl, apiKey: userApiKey } = requestBody;
+
+  // 自带密钥优先。这样同一个部署既能"管理员配一次、全家共用"，
+  // 也能"每人用自己的额度"，两种用法不必二选一。
+  const apiKey = userApiKey || process.env.API_KEY;
 
   if (!apiKey) {
-    res.status(500).json({ error: '服务端未配置 API_KEY。请在项目根目录创建 .env 并填入 API_KEY=你的密钥（可参考 .env.example），然后重启服务。' });
+    res.status(500).json({
+      error:
+        '没有可用的 AI 密钥。二选一：① 在界面的「AI 模型配置」里填入你自己的 API 密钥' +
+        '（只存在本浏览器）；② 由部署者在服务端 .env 中设置 API_KEY 后重启服务。',
+    });
     return;
   }
 
