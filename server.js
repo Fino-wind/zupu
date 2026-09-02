@@ -26,6 +26,30 @@ const DEFAULT_DEV_ORIGINS = [
 ];
 
 /**
+ * 无论密钥属于谁，都不允许服务端去请求的地址。
+ *
+ * 只堵一类：link-local（169.254/16 与 fe80::/10）。云厂商的实例元数据服务
+ * 就挂在 169.254.169.254 上，一次请求就能换到该主机的云凭据——那是比本项目
+ * 全部数据加起来更大的损失，且没有任何正当用途需要从这里访问它。
+ *
+ * 🔴 私有网段（192.168/10/172.16-31）和 localhost 是【故意放行】的：
+ * 本项目的典型部署就是家里那台机器指向同一内网的自建网关或本机模型服务，
+ * 把它们一并封掉等于砍掉主场景。这是知情的取舍，不是遗漏。
+ * ⚠️ 因此这不能挡住 DNS rebinding（域名解析到内网）。真要部署到公网，
+ * 请按 README「安全须知」在前面加一层鉴权——那才是这个项目的边界。
+ */
+function isBlockedHost(hostname) {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  // IPv4 link-local: 169.254.0.0/16（含云元数据 169.254.169.254）
+  if (/^169\.254\./.test(host)) return true;
+  // IPv6 link-local: fe80::/10
+  if (/^fe[89ab][0-9a-f]:/.test(host)) return true;
+  // 各云厂商的元数据域名
+  if (host === 'metadata.google.internal' || host === 'metadata') return true;
+  return false;
+}
+
+/**
  * 自定义 AI 端点白名单。
  * 不设白名单时一律拒绝自定义 baseUrl —— 因为服务端会带着自己的 API_KEY 去请求它，
  * 任何人传一个自己控制的地址就能把密钥拿走（SSRF + 凭据外泄）。
@@ -219,6 +243,22 @@ function validateAiRequestBody(body) {
 
   const baseUrl = typeof body.baseUrl === 'string' ? body.baseUrl.trim() : '';
   const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
+
+  // 硬性阻断先于一切：自带密钥也不能让服务端去访问云元数据地址
+  if (baseUrl) {
+    let parsed;
+    try {
+      parsed = new URL(baseUrl);
+    } catch {
+      return { error: 'AI 端点地址格式不正确' };
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return { error: 'AI 端点必须是 http 或 https 地址' };
+    }
+    if (isBlockedHost(parsed.hostname)) {
+      return { error: '该地址不允许访问' };
+    }
+  }
 
   // 白名单只约束「花服务端的钱」这种情况。
   // 自带密钥时放行任意端点——用自己的钥匙开自己想开的门，本来就不该由服务端裁决；

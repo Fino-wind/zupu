@@ -137,6 +137,32 @@ describe('Backend API', () => {
     }
   });
 
+  it.each([
+    ['AWS/通用云元数据', 'http://169.254.169.254/latest/api'],
+    ['GCP 元数据域名', 'http://metadata.google.internal/computeMetadata/v1'],
+    ['IPv6 link-local', 'http://[fe80::1]/v1'],
+  ])('自带密钥也不能让服务端访问 %s', async (_label, url) => {
+    const res = await request(app)
+      .post('/api/ai/generate')
+      .send({ prompt: 'hi', baseUrl: url, apiKey: 'user-supplied-key' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('不允许访问');
+  });
+
+  it('非 http(s) 协议应被拒绝', async () => {
+    const res = await request(app)
+      .post('/api/ai/generate')
+      .send({ prompt: 'hi', baseUrl: 'file:///etc/passwd', apiKey: 'k' });
+    expect(res.status).toBe(400);
+  });
+
+  it('私有网段仍然放行（自托管指向内网网关是主场景，不是漏网）', async () => {
+    const res = await request(app)
+      .post('/api/ai/generate')
+      .send({ prompt: 'hi', baseUrl: 'http://192.168.1.10:3000/v1', apiKey: 'k' });
+    expect(res.status).not.toBe(400);
+  }, 20000);
+
   it('超长 prompt 应被拒绝', async () => {
     const res = await request(app)
       .post('/api/ai/generate')
