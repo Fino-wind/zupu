@@ -103,6 +103,10 @@
   .writing-v {
     writing-mode: vertical-rl;
     text-orientation: mixed;
+    /* 全角括号、间隔号在竖排里要用字体的竖排变体，否则横着躺 */
+    font-feature-settings: 'vert' 1, 'vrt2' 1;
+    /* 名字永远一列到底：折成两三列后各列长短不一，怎么对都不齐 */
+    white-space: nowrap;
   }
 
   .ink-path {

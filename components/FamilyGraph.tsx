@@ -114,6 +114,15 @@ const DraggableNode = memo(
     const age = calculateAge(node.data.birthDate);
     const generation = (node.depth || 0) + 1;
     const isHighlight = node.data.isHighlight;
+    // 卡片按 2–4 字真名设计。名字越长字号越小、字距越紧，且永远一列——
+    // 折成多列后各列长短不一，无论怎么居中看起来都是歪的。
+    const nameLength = Array.from(node.data.name ?? '').length;
+    const nameSizeClass =
+      nameLength <= 4
+        ? 'text-2xl tracking-[0.4em]'
+        : nameLength <= 7
+          ? 'text-xl tracking-[0.2em]'
+          : 'text-base tracking-[0.05em]';
     const generationLabel = locale === 'en' ? `Gen ${generation}` : `${generation}世`;
     const genderLabel =
       locale === 'en'
@@ -239,9 +248,9 @@ const DraggableNode = memo(
           {generationLabel}
         </div>
         <div className='flex justify-center items-center gap-4 flex-1 w-full pointer-events-none mt-2'>
-          <div className='writing-v text-center h-36 flex items-center justify-center'>
+          <div className='writing-v text-center min-h-36 max-h-56 flex items-center justify-center'>
             <h3
-              className={`text-2xl font-bold leading-none tracking-[0.4em] font-serif ${isHighlight ? 'text-[#8b5a00] scale-110 drop-shadow-sm' : 'text-ink'}`}
+              className={`font-bold leading-none font-serif ${nameSizeClass} ${isHighlight ? 'text-[#8b5a00] drop-shadow-sm' : 'text-ink'} ${isHighlight && nameLength <= 4 ? 'scale-110' : ''}`}
             >
               {node.data.name}
             </h3>
