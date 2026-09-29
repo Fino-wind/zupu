@@ -1,7 +1,7 @@
 # zupu · incident-log（已结案事故 · 只增不改）
 
 > 每条一个稳定 ID `PM-YYYY-MM-DD-slug`，别处引用用 ID。
-> 记的是**过程与证据**，不是待办 —— 没修完的东西去 `docs/roadmap.md`；改架构的结论去 `docs/code-map.md`。
+> 记的是**过程与证据**，不是待办 —— 没修完的东西去 `Fino-wind/zupu-private` 的 issue；改架构的结论去 `docs/code-map.md`。
 > 三条都发生在 2026-09-01 ~ 09-02 那 36 小时里，且**前两条是同一形状的病**：镜像能构建、容器 Up、首页 200，但后端根本没起来。
 
 ---
@@ -44,7 +44,7 @@
 - 这个容器的形态决定了故障特征：**首页 200 + 其余 502 = 后端进程死了，不是 nginx 的事**。先 `docker logs` 找 Node 退出栈。
 - 逐文件 COPY 的代价是「每加一个文件要记得登记」；换成 `COPY *.js ./` 会把风险换成「误带进不该带的文件」。现在选的是前者 + 探活兜底。
 
-→ 固化为 code-map §14 ⑤ ⑯。同日发现的另一条同形态故障（MCP 并发导致 Node 退出）见 code-map §14 ⑬，待办在 roadmap。
+→ 固化为 code-map §14 ⑤ ⑯。同日发现的另一条同形态故障（MCP 并发导致 Node 退出）见 code-map §14 ⑬，待办在 zupu-private issue。
 
 ---
 

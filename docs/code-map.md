@@ -2,7 +2,7 @@
 
 > **2026-09-02 首次生成**（`code-map` skill 全量流程，扫描范围 = 仓库全部源码 + 部署文件 + 测试）。
 > **维护规则**：改了源码就顺手改这里对应的段；**不写行号，只写符号名**（行号会漂）。
-> 待办 / bug / 技术债 → `docs/roadmap.md`；已结案事故 → `docs/incident-log.md`；本文件只写「现在是怎么接的」。
+> 待办 / bug / 技术债 → GitHub issue（私有 repo `Fino-wind/zupu-private`）；已结案事故 → `docs/incident-log.md`；本文件只写「现在是怎么接的」。
 > 🔒 不变量在 §14，**动 `server.js` / `mcp.js` / `Dockerfile` / `App.tsx` 删除逻辑之前先读那一节。**
 
 ---
@@ -465,7 +465,7 @@ localStorage（浏览器，key 名不带前缀）
 ## §11 · 埋点 / 日志
 
 **零埋点**（无 PostHog，无任何远程日志）。后端只有 `console.log/error/warn`，Docker 下进 `docker logs`。
-前端错误全靠 `console.warn` + 吐司。这是自托管个人工具的刻意状态；要加可观测性时先看 roadmap 有没有已定方案。
+前端错误全靠 `console.warn` + 吐司。这是自托管个人工具的刻意状态；要加可观测性时先看 zupu-private 的 issue 有没有已定方案。
 
 ---
 
@@ -518,7 +518,7 @@ agent ────────MCP──▶ mcp.js 工具 ─────┘
 运行镜像是逐文件复制，builder 阶段的 `COPY . .` 不会带到运行阶段。破了 = 镜像能构建、容器能起（nginx 是 PID 1）、`/api` `/mcp` 全 502（→ `docs/incident-log.md` PM-2026-09-02-dockerfile-copy-mcp）。CI 的探活步骤是这条的机械守卫。
 
 **⑥ MCP 协议版本 = 2025-11-25 = SDK 1.30.0 上限；按 2026-07-28 规范原则写：无状态（`sessionIdGenerator: undefined`）、不用 Roots / Sampling / Logging、工具列表顺序确定、`outputSchema` + `structuredContent`、GET/DELETE 回 405。**
-升 SDK 前看 `npm view @modelcontextprotocol/sdk dist-tags`（roadmap 有复查节点）。破了 = Claude connector 审核标准不过（每个工具要 title + readOnlyHint/destructiveHint；只有 `archive_member` 标 destructive），`mcp.test.ts` 逐条断言。
+升 SDK 前看 `npm view @modelcontextprotocol/sdk dist-tags`（zupu-private #7 有复查节点）。破了 = Claude connector 审核标准不过（每个工具要 title + readOnlyHint/destructiveHint；只有 `archive_member` 标 destructive），`mcp.test.ts` 逐条断言。
 
 **⑦ `is_deleted` 列与 `json_content.isDeleted` 必须同写；读取只信 json。**
 三处写（POST upsert / DELETE / mcp saveOne）都同时写两处。破了 = 列与 json 打架，而没有任何读者看列，所以错误会静默潜伏到有人加 `WHERE is_deleted=0` 那天。
@@ -666,7 +666,7 @@ Vercel（zupu-nine.vercel.app）
   🔕 **2026-09-02 起已用 `vercel.json` 的 `ignoreCommand: "exit 0"` 关掉自动构建**
      （Vercel 约定：该命令 exit 0 = 忽略本次构建，exit 1 = 正常构建；vercel.json 覆盖后台的 Ignored Build Step）。
      ⚠️ **只关了构建，站点与既有部署仍在线** —— 这是刻意的：老大手机 Safari 里可能还存着一份
-     从没同步到 fino 的族谱记录，得靠打开那个站导出（roadmap P1）。**在他导出之前，别删项目、别改域名。**
+     从没同步到 fino 的族谱记录，得靠打开那个站导出（zupu-private #1）。**在他导出之前，别删项目、别改域名。**
      要恢复自动构建就删掉 vercel.json；要更彻底就去 Vercel 后台断开 Git 集成。
 
 本地开发
